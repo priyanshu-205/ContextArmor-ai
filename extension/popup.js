@@ -493,47 +493,83 @@ function setupQuickOptimizer() {
 }
 
 // ---------------------------------------------------------------------------
-// View Navigation (Hero Showcase vs Control Center)
+// Multi-Studio View Router
 // ---------------------------------------------------------------------------
 
-function setupViewNavigation() {
-  const tabOverview = document.getElementById('tab-overview');
-  const tabControls = document.getElementById('tab-controls');
-  const viewHero = document.getElementById('view-hero');
-  const viewControls = document.getElementById('view-controls');
-  const btnGetStarted = document.getElementById('btn-get-started');
-  const btnBackToHero = document.getElementById('btn-back-to-hero');
-  const btnClose = document.getElementById('btn-close-popup');
+const STUDIOS = ['overview', 'guardrails', 'compression', 'transfer', 'analytics'];
 
-  function switchView(target) {
-    if (target === 'controls') {
-      if (viewHero) viewHero.classList.remove('active-view');
-      if (viewControls) viewControls.classList.add('active-view');
-      if (tabOverview) tabOverview.classList.remove('active');
-      if (tabControls) tabControls.classList.add('active');
-      loadAnalytics();
-    } else {
-      if (viewControls) viewControls.classList.remove('active-view');
-      if (viewHero) viewHero.classList.add('active-view');
-      if (tabControls) tabControls.classList.remove('active');
-      if (tabOverview) tabOverview.classList.add('active');
+function navigateTo(studioName) {
+  if (!STUDIOS.includes(studioName)) studioName = 'overview';
+
+  STUDIOS.forEach((name) => {
+    const panelId = name === 'overview' ? 'view-hero' : `view-${name}`;
+    const tabId = `tab-${name}`;
+    const panel = document.getElementById(panelId);
+    const tab = document.getElementById(tabId);
+
+    if (panel) {
+      if (name === studioName) {
+        panel.classList.add('active-view');
+      } else {
+        panel.classList.remove('active-view');
+      }
     }
-  }
 
-  if (tabOverview) tabOverview.addEventListener('click', () => switchView('hero'));
-  if (tabControls) tabControls.addEventListener('click', () => switchView('controls'));
-  if (btnGetStarted) btnGetStarted.addEventListener('click', () => switchView('controls'));
-  if (btnBackToHero) btnBackToHero.addEventListener('click', () => switchView('hero'));
-
-  // Quick navigation when clicking feature rows
-  ['feat-guardrails', 'feat-compression', 'feat-transfer'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('click', () => switchView('controls'));
+    if (tab) {
+      if (name === studioName) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
     }
   });
 
-  // Close button
+  if (studioName === 'analytics') {
+    loadAnalytics();
+  }
+}
+
+function setupViewNavigation() {
+  // Navigation tabs
+  STUDIOS.forEach((name) => {
+    const tab = document.getElementById(`tab-${name}`);
+    if (tab) {
+      tab.addEventListener('click', () => navigateTo(name));
+    }
+  });
+
+  // Hero feature cards -> deep-link directly to their specific studios!
+  const heroGuardrails = document.getElementById('hero-btn-guardrails');
+  if (heroGuardrails) {
+    heroGuardrails.addEventListener('click', () => navigateTo('guardrails'));
+  }
+
+  const heroCompression = document.getElementById('hero-btn-compression');
+  if (heroCompression) {
+    heroCompression.addEventListener('click', () => navigateTo('compression'));
+  }
+
+  const heroTransfer = document.getElementById('hero-btn-transfer');
+  if (heroTransfer) {
+    heroTransfer.addEventListener('click', () => navigateTo('transfer'));
+  }
+
+  // Get Started button
+  const btnGetStarted = document.getElementById('btn-get-started');
+  if (btnGetStarted) {
+    btnGetStarted.addEventListener('click', () => navigateTo('guardrails'));
+  }
+
+  // Back breadcrumb buttons
+  document.querySelectorAll('.btn-back-breadcrumb').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-back') || 'overview';
+      navigateTo(target);
+    });
+  });
+
+  // Close popup button
+  const btnClose = document.getElementById('btn-close-popup');
   if (btnClose) {
     btnClose.addEventListener('click', () => {
       window.close();
@@ -546,6 +582,7 @@ function setupViewNavigation() {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initParticlesCanvas();
   setupViewNavigation();
   await checkBackendStatus();
   await loadAnalytics();
