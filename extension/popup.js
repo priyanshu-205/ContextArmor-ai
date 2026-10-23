@@ -510,6 +510,96 @@ function setupGuardrailsStudio() {
 }
 
 // ---------------------------------------------------------------------------
+// Dedicated AST Code & Prompt Compression Studio Controller
+// ---------------------------------------------------------------------------
+
+function setupCompressionStudio() {
+  const textarea = document.getElementById('compress-input');
+  const runBtn = document.getElementById('btn-run-compress');
+  const copyBtn = document.getElementById('btn-copy-compressed');
+  const outputDiv = document.getElementById('compress-output');
+  const tokenStatDiv = document.getElementById('quick-token-stat');
+  const gaugeVal = document.getElementById('compress-gauge-val');
+  const gaugeCircle = document.getElementById('compress-gauge-circle');
+  const reductionChip = document.getElementById('compression-reduction-chip');
+  const origTokensEl = document.getElementById('comp-orig-tokens');
+  const newTokensEl = document.getElementById('comp-new-tokens');
+  const savedTokensEl = document.getElementById('comp-saved-tokens');
+
+  if (!runBtn) return;
+
+  runBtn.addEventListener('click', async () => {
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+      if (textarea) textarea.focus();
+      return;
+    }
+
+    runBtn.disabled = true;
+    runBtn.textContent = '⚡ Optimizing AST…';
+    if (outputDiv) outputDiv.style.display = 'none';
+
+    chrome.storage.local.get(['signaturePruning'], async (prefs) => {
+      const mode = prefs.signaturePruning ? 'signatures' : 'lossless';
+      try {
+        const result = await sendToBackground('optimize', { text, mode });
+        const d = result && result.data ? result.data : result;
+        const optimized = d?.optimized_prompt || d?.optimized || text;
+
+        if (outputDiv) {
+          outputDiv.textContent = optimized;
+          outputDiv.style.display = 'block';
+        }
+
+        if (copyBtn) {
+          copyBtn.style.display = 'inline-flex';
+          copyBtn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(optimized);
+              copyBtn.textContent = '✅ Copied!';
+              setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+            } catch (_) {}
+          };
+        }
+
+        const origTokens = Number(d?.original_tokens) || Math.max(1, (text.length / 4) | 0);
+        const savedTokens = Number(d?.tokens_saved) || 0;
+        const newTokens = Math.max(0, origTokens - savedTokens);
+        const reductionPct = Number(d?.reduction_percentage) || (origTokens > 0 ? (savedTokens / origTokens) * 100 : 0);
+
+        if (origTokensEl) origTokensEl.textContent = origTokens;
+        if (newTokensEl) newTokensEl.textContent = newTokens;
+        if (savedTokensEl) savedTokensEl.textContent = `${savedTokens} (${reductionPct.toFixed(1)}%)`;
+
+        if (gaugeVal) {
+          gaugeVal.textContent = `${Math.round(reductionPct)}%`;
+        }
+        if (reductionChip) {
+          reductionChip.textContent = `${reductionPct.toFixed(1)}% Saved`;
+        }
+        if (gaugeCircle) {
+          const offset = 264 - (264 * Math.min(reductionPct, 100)) / 100;
+          gaugeCircle.style.strokeDashoffset = offset;
+        }
+
+        if (tokenStatDiv && savedTokens > 0) {
+          tokenStatDiv.textContent = `✅ Saved ${savedTokens} tokens (${reductionPct.toFixed(1)}% reduction)`;
+          tokenStatDiv.style.display = 'block';
+        }
+      } catch (err) {
+        if (outputDiv) {
+          outputDiv.textContent = `⚠ Optimization error: ${err.message}`;
+          outputDiv.style.display = 'block';
+        }
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '⚡ Compress AST Code';
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Quick Optimizer
 // ---------------------------------------------------------------------------
 
@@ -708,6 +798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   setupToggles();
   setupGuardrailsStudio();
+  setupCompressionStudio();
   setupTransfer();
   setupQuickOptimizer();
 
