@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContextArmor AI — Security Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { 
+      background: var(--bg-primary); 
+      min-height: 100vh; 
+      padding: 0;
+      margin: 0;
+    }
+    
+    .dashboard-header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+    
+    .header-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.1rem; font-weight: 700; color: var(--text-primary);
+    }
+    
+    .logo-badge {
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      padding: 6px 12px; border-radius: 8px; font-size: 13px;
+      box-shadow: 0 0 16px rgba(99,102,241,0.4);
+    }
+    
+    .header-actions {
+      display: flex; align-items: center; gap: 12px;
+    }
+    
+    .dashboard-main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+    
+    /* KPI Ribbon */
+    .kpi-ribbon {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    
+    .kpi-ribbon-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      text-align: center;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-ribbon-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--card-accent, var(--accent-indigo));
+    }
+    .kpi-ribbon-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .kpi-ribbon-value { font-size: 2rem; font-weight: 700; font-family: var(--font-mono); line-height: 1; margin-bottom: 6px; }
+    .kpi-ribbon-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-ribbon-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-mono); }
+    
+    /* Analytics Row */
+    .analytics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    
+    .chart-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+    
+    .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 20px; color: var(--text-secondary); }
+    
+    /* SVG Donut Chart */
+    .donut-container { display: flex; align-items: center; gap: 24px; }
+    .donut-legend { flex: 1; }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-label { color: var(--text-secondary); flex: 1; }
+    .legend-value { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+    
+    /* Bar Chart */
+    .bar-chart { display: flex; flex-direction: column; gap: 12px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; }
+    .bar-label { font-size: 12px; color: var(--text-secondary); width: 120px; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 99px; transition: width 0.8s ease; }
+    .bar-value { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); width: 50px; }
+    
+    /* Sandbox Section */
+    .sandbox-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+    
+    .sandbox-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .sandbox-title { font-size: 15px; font-weight: 600; }
+    .sandbox-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    
+    .sandbox-tabs {
+      display: flex;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-primary);
+    }
+    .sandbox-tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      font-size: 13px;
+      font-weight: 500;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+    .sandbox-tab:hover { color: var(--text-secondary); }
+    .sandbox-tab.active { color: var(--accent-indigo); border-bottom-color: var(--accent-indigo); }
+    
+    .sandbox-body { padding: 24px; }
+    .sandbox-panel { display: none; }
+    .sandbox-panel.active { display: block; }
+    
+    /* Preset buttons */
+    .preset-strip { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .preset-btn {
+      padding: 6px 14px; border-radius: var(--radius-sm);
+      background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+      color: var(--text-secondary); font-size: 12px; cursor: pointer;
+      transition: var(--transition); font-family: var(--font-sans);
+    }
+    .preset-btn:hover { border-color: var(--accent-indigo); color: var(--accent-indigo); }
+    
+    /* Risk gauge */
+    .risk-gauge-container {
+      display: flex; align-items: center; gap: 16px; margin-top: 12px;
+    }
+    .risk-number { font-size: 2.5rem; font-weight: 700; font-family: var(--font-mono); min-width: 70px; }
+    .risk-number.low { color: var(--accent-emerald); }
+    .risk-number.medium { color: var(--accent-amber); }
+    .risk-number.high { color: var(--accent-crimson); }
+    .risk-bar-full { flex: 1; height: 10px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+    .risk-bar-inner { height: 100%; border-radius: 99px; transition: width 0.6s ease, background 0.3s; }
+    
+    /* Diff view */
+    .diff-container {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;
+    }
+    .diff-pane {
+      border-radius: var(--radius-md); overflow: hidden;
+    }
+    .diff-pane-header {
+      padding: 8px 14px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .diff-pane-header.before { background: rgba(239,68,68,0.1); border-bottom: 2px solid var(--accent-crimson); color: var(--accent-crimson); }
+    .diff-pane-header.after { background: rgba(16,185,129,0.1); border-bottom: 2px solid var(--accent-emerald); color: var(--accent-emerald); }
+    .diff-code { background: #0d1117; padding: 14px; font-family: var(--font-mono); font-size: 12px; color: #e6edf3; white-space: pre-wrap; overflow-y: auto; max-height: 320px; line-height: 1.6; }
+    
+    /* Findings grid */
+    .findings-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    
+    /* Audit log table */
+    .audit-section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+    .audit-header { padding: 20px 24px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+    .audit-table { width: 100%; border-collapse: collapse; }
+    .audit-table th {
+      text-align: left; padding: 12px 16px;
+      font-size: 11px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-primary);
+    }
+    .audit-table td {
+      padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 13px; vertical-align: middle;
+    }
+    .audit-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .module-badge {
+      display: inline-flex; align-items: center; padding: 2px 10px;
+      border-radius: 4px; font-size: 11px; font-weight: 600;
+      font-family: var(--font-mono); letter-spacing: 0.04em;
+    }
+    .module-SCAN { background: rgba(99,102,241,0.15); color: var(--accent-indigo); }
+    .module-OPTIMIZE { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
+    .module-TRANSFER { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+    .action-badge {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 4px; font-size: 11px; font-weight: 600;
+      font-family: var(--font-mono);
+    }
+    .action-ALLOW { background: rgba(16,185,129,0.1); color: var(--accent-emerald); border: 1px solid rgba(16,185,129,0.2); }
+    .action-WARN { background: rgba(245,158,11,0.1); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.2); }
+    .action-BLOCK { background: rgba(239,68,68,0.1); color: var(--accent-crimson); border: 1px solid rgba(239,68,68,0.2); }
+    
+    /* Settings modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl); padding: 32px;
+      max-width: 480px; width: 90%; box-shadow: var(--shadow-lg);
+    }
+    .modal-box h2 { margin-bottom: 20px; font-size: 1.2rem; }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .form-input, .form-select {
+      width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+      color: var(--text-primary); border-radius: var(--radius-md); padding: 10px 12px;
+      font-family: var(--font-mono); font-size: 13px; box-sizing: border-box;
+    }
+    .form-input:focus, .form-select:focus { outline: none; border-color: var(--accent-indigo); box-shadow: 0 0 0 3px var(--accent-indigo-glow); }
+    .form-select option { background: var(--bg-secondary); }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="dashboard-header">
+  <div class="header-logo">
+    <div class="logo-badge">🛡️</div>
+    <div>
+      <div>ContextArmor AI</div>
+      <div style="font-size:11px;color:var(--text-muted);font-weight:400;">Security Dashboard &amp; Live Demo</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div id="db-status-badge" class="pill pill-red" style="font-size:12px;">● Connecting...</div>
+    <button class="btn-secondary btn-sm" id="btn-reset-demo" style="font-family:var(--font-sans);font-size:12px;padding:6px 14px;border-radius:6px;background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-secondary);cursor:pointer;">↺ Reset Demo Data</button>
+    <button class="btn-secondary btn-sm" id="btn-settings" style="font-family:var(--font-sans);font-size:12px;padding:6px 14px;border-radius:6px;background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-secondary);cursor:pointer;">⚙️ Settings</button>
+  </div>
+</div>
+
+<div class="dashboard-main">
+
+  <!-- KPI Ribbon -->
+  <div class="kpi-ribbon" id="kpi-ribbon">
+    <div class="kpi-ribbon-card" style="--card-accent: var(--accent-indigo)">
+      <div class="kpi-ribbon-value" id="k-total" style="color:var(--accent-indigo)">—</div>
+      <div class="kpi-ribbon-label">Prompts Protected</div>
+    </div>
+    <div class="kpi-ribbon-card" style="--card-accent: var(--accent-emerald)">
+      <div class="kpi-ribbon-value" id="k-tokens" style="color:var(--accent-emerald)">—</div>
+      <div class="kpi-ribbon-label">Tokens Saved</div>
+    </div>
+    <div class="kpi-ribbon-card" style="--card-accent: var(--accent-crimson)">
+      <div class="kpi-ribbon-value" id="k-pii" style="color:var(--accent-crimson)">—</div>
+      <div class="kpi-ribbon-label">PII Redacted</div>
+    </div>
+    <div class="kpi-ribbon-card" style="--card-accent: #F97316">
+      <div class="kpi-ribbon-value" id="k-blocked" style="color:#F97316">—</div>
+      <div class="kpi-ribbon-label">Threats Blocked</div>
+    </div>
+    <div class="kpi-ribbon-card" style="--card-accent: var(--accent-amber)">
+      <div class="kpi-ribbon-value" id="k-risk" style="color:var(--accent-amber)">—</div>
+      <div class="kpi-ribbon-label">Avg Risk Score</div>
+    </div>
+  </div>
+
+  <!-- Analytics Charts -->
+  <div class="analytics-row">
+    <!-- Donut chart: threat categories -->
+    <div class="chart-card">
+      <div class="chart-title">🔍 Threat Category Breakdown</div>
+      <div class="donut-container">
+        <svg width="120" height="120" viewBox="0 0 120 120" id="donut-svg">
+          <circle cx="60" cy="60" r="45" fill="none" stroke="#1a2234" stroke-width="18"/>
+          <!-- segments added by JS -->
+        </svg>
+        <div class="donut-legend" id="donut-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#6366F1"></div><span class="legend-label">Loading...</span></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Bar chart: token efficiency -->
+    <div class="chart-card">
+      <div class="chart-title">📊 Token Efficiency — Recent Operations</div>
+      <div class="bar-chart" id="bar-chart">
+        <div style="color:var(--text-muted);font-size:13px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Live Demo Sandbox -->
+  <div class="sandbox-section">
+    <div class="sandbox-header">
+      <div>
+        <div class="sandbox-title">🔬 Interactive Live Demo Sandbox</div>
+        <div class="sandbox-subtitle">Test all 3 ContextArmor modules with realistic sample data</div>
+      </div>
+    </div>
+    
+    <div class="sandbox-tabs">
+      <div class="sandbox-tab active" data-tab="scan">🛡️ Security Scanner</div>
+      <div class="sandbox-tab" data-tab="optimize">✨ Prompt Optimizer</div>
+      <div class="sandbox-tab" data-tab="transfer">📦 Chat Transfer</div>
+    </div>
+    
+    <div class="sandbox-body">
+    
+      <!-- Tab 1: Security Scanner -->
+      <div class="sandbox-panel active" id="panel-scan">
+        <div class="preset-strip">
+          <button class="preset-btn" id="preset-scan-1">🔴 Leaky Dev Prompt (API Keys + PII + Injection)</button>
+          <button class="preset-btn" id="preset-scan-2">🟡 PII Only (Email + Phone + PAN)</button>
+          <button class="preset-btn" id="preset-scan-3">🟢 Clean Prompt (No Threats)</button>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:12px;">
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Input Prompt</div>
+            <textarea id="scan-input" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:12px;resize:vertical;min-height:140px;box-sizing:border-box;" placeholder="Enter or paste a prompt to scan for secrets, PII, and injection attacks..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button id="btn-run-scan" style="padding:8px 20px;background:var(--accent-indigo);border:none;border-radius:var(--radius-md);color:white;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-sans);">🛡️ Run Security Scan</button>
+          <button id="btn-redact-apply" style="padding:8px 20px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:var(--font-sans);display:none;">✅ Apply Redaction</button>
+        </div>
+        
+        <!-- Risk gauge -->
+        <div id="scan-results" style="display:none;">
+          <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;">
+            <div style="flex:1;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Risk Score</div>
+              <div class="risk-gauge-container">
+                <div class="risk-number low" id="risk-number">0</div>
+                <div style="flex:1;">
+                  <div class="risk-bar-full"><div class="risk-bar-inner" id="risk-bar" style="width:0%;background:var(--accent-emerald)"></div></div>
+                  <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-muted);"><span>0</span><span>WARN 20</span><span>BLOCK 60</span><span>100</span></div>
+                </div>
+              </div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Action</div>
+              <div class="action-badge action-ALLOW" id="action-badge">ALLOW</div>
+            </div>
+          </div>
+          
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Detected Findings</div>
+          <div class="findings-grid" id="findings-grid"></div>
+          
+          <div style="margin-top:16px;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Sanitized Output</div>
+            <pre id="sanitized-output" style="background:#0d1117;border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:14px;font-family:var(--font-mono);font-size:12px;color:#e6edf3;white-space:pre-wrap;max-height:160px;overflow-y:auto;"></pre>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Tab 2: Optimizer -->
+      <div class="sandbox-panel" id="panel-optimize">
+        <div class="preset-strip">
+          <button class="preset-btn" id="preset-opt-1">📝 Bloated Python Class + Wordy Prompt</button>
+          <button class="preset-btn" id="preset-opt-2">💾 JS Service with JSDoc Comments</button>
+          <button class="preset-btn" id="preset-opt-3">📖 Conversational Filler Prompt</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+          <div style="font-size:12px;color:var(--text-secondary);">Mode:</div>
+          <button class="preset-btn active-mode" id="mode-lossless" style="border-color:var(--accent-indigo);color:var(--accent-indigo);">Lossless</button>
+          <button class="preset-btn" id="mode-signatures">AST Signatures</button>
+          <div id="opt-spinner" style="display:none;font-size:13px;color:var(--text-muted);">⏳ Optimizing...</div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Input</div>
+          <textarea id="opt-input" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:12px;resize:vertical;min-height:140px;box-sizing:border-box;" placeholder="Paste a bloated prompt or code snippet..."></textarea>
+        </div>
+        <button id="btn-run-optimize" style="padding:8px 20px;background:var(--accent-indigo);border:none;border-radius:var(--radius-md);color:white;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-sans);margin-bottom:16px;">✨ Optimize &amp; Compress</button>
+        
+        <div id="opt-results" style="display:none;">
+          <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+            <div class="token-badge" id="badge-original">Original: — tokens</div>
+            <div style="color:var(--text-muted)">→</div>
+            <div class="token-badge" id="badge-compressed" style="color:var(--accent-emerald);border-color:rgba(16,185,129,0.3);">Compressed: — tokens</div>
+            <div class="token-badge" id="badge-saved" style="color:var(--accent-amber);border-color:rgba(245,158,11,0.3);">Saved: —%</div>
+          </div>
+          
+          <div class="diff-container">
+            <div class="diff-pane">
+              <div class="diff-pane-header before">
+                <span>BEFORE</span>
+                <span id="before-tokens" style="font-family:var(--font-mono);font-size:11px;"></span>
+              </div>
+              <pre class="diff-code" id="opt-before"></pre>
+            </div>
+            <div class="diff-pane">
+              <div class="diff-pane-header after">
+                <span>AFTER</span>
+                <span id="after-tokens" style="font-family:var(--font-mono);font-size:11px;"></span>
+              </div>
+              <pre class="diff-code" id="opt-after"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Tab 3: Chat Transfer -->
+      <div class="sandbox-panel" id="panel-transfer">
+        <div class="preset-strip">
+          <button class="preset-btn" id="preset-xfer-1">🐛 12-Turn FastAPI Debugging Session</button>
+          <button class="preset-btn" id="preset-xfer-2">⚛️ React Component + State Bug</button>
+          <button class="preset-btn" id="preset-xfer-3">🗃️ Database Schema Design Chat</button>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Raw Transcript / JSON Messages</div>
+          <textarea id="xfer-input" style="width:100%;background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:11px;resize:vertical;min-height:140px;box-sizing:border-box;" placeholder='Paste conversation transcript or JSON array: [{"role":"user","content":"..."},...]'></textarea>
+        </div>
+        <button id="btn-run-transfer" style="padding:8px 20px;background:var(--accent-indigo);border:none;border-radius:var(--radius-md);color:white;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-sans);margin-bottom:16px;">📦 Generate Bridge Prompt</button>
+        
+        <div id="xfer-results" style="display:none;">
+          <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+            <div class="token-badge" id="xfer-original">Original: — tokens</div>
+            <div style="color:var(--text-muted)">→</div>
+            <div class="token-badge" id="xfer-bridge" style="color:var(--accent-emerald);border-color:rgba(16,185,129,0.3);">Bridge: — tokens</div>
+            <div class="token-badge" id="xfer-ratio" style="color:var(--accent-amber);border-color:rgba(245,158,11,0.3);">—x compression</div>
+          </div>
+          
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Generated Continuation Bridge Prompt</div>
+          <pre id="bridge-output" style="background:#0d1117;border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-md);padding:16px;font-family:var(--font-mono);font-size:11px;color:#e6edf3;white-space:pre-wrap;max-height:400px;overflow-y:auto;"></pre>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button id="btn-copy-bridge-dash" style="padding:7px 16px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--font-sans);">📋 Copy Bridge Prompt</button>
+            <button id="btn-open-chat" style="padding:7px 16px;background:var(--accent-indigo);border:none;border-radius:var(--radius-md);color:white;font-size:12px;cursor:pointer;font-family:var(--font-sans);">🚀 Open Fresh Chat</button>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Security Audit Log -->
+  <div class="audit-section">
+    <div class="audit-header">
+      <div>
+        <div style="font-size:15px;font-weight:600;">🔐 Live Security Event Audit Log</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Last 25 events • Auto-refreshes every 30s</div>
+      </div>
+      <button id="btn-refresh-audit" style="padding:6px 14px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--font-sans);">↺ Refresh</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Module</th>
+            <th>Risk Score</th>
+            <th>Action</th>
+            <th>Detected Entities</th>
+            <th>Tokens Saved</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Loading events...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-box">
+    <h2>⚙️ API Settings</h2>
+    <div class="form-group">
+      <label class="form-label">LLM Provider (for optional prompt enhancement)</label>
+      <select class="form-select" id="settings-provider">
+        <option value="">None (Deterministic only)</option>
+        <option value="openai">OpenAI (GPT-4o-mini)</option>
+        <option value="anthropic">Anthropic (Claude Haiku)</option>
+        <option value="gemini">Google Gemini Flash</option>
+        <option value="ollama">Local Ollama (llama3)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">API Key</label>
+      <input type="password" class="form-input" id="settings-api-key" placeholder="sk-... or your API key">
+    </div>
+    <div class="form-group" id="ollama-group" style="display:none;">
+      <label class="form-label">Ollama Endpoint</label>
+      <input type="text" class="form-input" id="settings-ollama-url" value="http://localhost:11434" placeholder="http://localhost:11434">
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-close" id="btn-settings-close" style="padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;border:1px solid var(--border-subtle);background:transparent;color:var(--text-secondary);font-family:var(--font-sans);">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="btn-settings-save" style="padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;border:1px solid var(--accent-indigo);background:var(--accent-indigo);color:white;font-family:var(--font-sans);">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

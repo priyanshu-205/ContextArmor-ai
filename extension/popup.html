@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContextArmor AI</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Popup-specific overrides */
+    body { width: 380px; min-height: 520px; overflow-x: hidden; background: var(--bg-primary); }
+    
+    .popup-header {
+      padding: 14px 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text-primary);
+    }
+    
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      box-shadow: 0 0 12px rgba(99,102,241,0.4);
+    }
+    
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      border: 1px solid;
+      font-family: var(--font-mono);
+    }
+    
+    .status-online {
+      background: rgba(16,185,129,0.1);
+      border-color: rgba(16,185,129,0.3);
+      color: var(--accent-emerald);
+    }
+    
+    .status-offline {
+      background: rgba(239,68,68,0.1);
+      border-color: rgba(239,68,68,0.3);
+      color: var(--accent-crimson);
+    }
+    
+    .section { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .section:last-child { border-bottom: none; }
+    .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
+    
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .kpi-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      text-align: center;
+    }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; font-family: var(--font-mono); color: var(--accent-indigo); line-height: 1; }
+    .kpi-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+    
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .toggle-label { font-size: 13px; color: var(--text-secondary); }
+    
+    .toggle-switch {
+      width: 36px; height: 20px; border-radius: 99px;
+      background: #374151; cursor: pointer; position: relative;
+      transition: background 0.2s ease; border: none; outline: none;
+      flex-shrink: 0;
+    }
+    .toggle-switch::after {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      background: white; border-radius: 50%; top: 2px; left: 2px;
+      transition: left 0.2s ease;
+    }
+    .toggle-switch.active { background: var(--accent-indigo); }
+    .toggle-switch.active::after { left: 18px; }
+    
+    .quick-action-btn {
+      width: 100%; padding: 10px 14px; border-radius: var(--radius-md);
+      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25);
+      color: var(--text-primary); font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; gap: 8px; transition: var(--transition);
+      font-family: var(--font-sans); margin-bottom: 8px;
+    }
+    .quick-action-btn:hover { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); }
+    .quick-action-btn:last-child { margin-bottom: 0; }
+    .quick-action-btn.loading { opacity: 0.6; pointer-events: none; }
+    
+    .mini-input {
+      width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+      color: var(--text-primary); border-radius: var(--radius-md); padding: 10px;
+      font-family: var(--font-sans); font-size: 12px; resize: vertical;
+      min-height: 72px; margin-bottom: 8px;
+      box-sizing: border-box;
+    }
+    .mini-input:focus { outline: none; border-color: var(--accent-indigo); box-shadow: 0 0 0 3px var(--accent-indigo-glow); }
+    
+    .output-preview {
+      background: #0d1117; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+      padding: 10px; font-family: var(--font-mono); font-size: 11px; color: #e6edf3;
+      max-height: 120px; overflow-y: auto; white-space: pre-wrap; margin-top: 8px;
+      display: none;
+    }
+    
+    .action-row { display: flex; gap: 6px; margin-top: 6px; }
+    .action-row .btn-sm {
+      flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 12px;
+      border: 1px solid var(--border-subtle); cursor: pointer; background: var(--bg-elevated);
+      color: var(--text-secondary); font-family: var(--font-sans); transition: var(--transition);
+    }
+    .action-row .btn-sm:hover { border-color: var(--border-medium); color: var(--text-primary); }
+    .action-row .btn-sm.primary { background: var(--accent-indigo); border-color: var(--accent-indigo); color: white; }
+    .action-row .btn-sm.primary:hover { filter: brightness(1.1); }
+    
+    .dashboard-btn {
+      width: 100%; padding: 12px; background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+      border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md);
+      color: var(--accent-indigo); font-size: 13px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: var(--transition); font-family: var(--font-sans);
+    }
+    .dashboard-btn:hover { background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3)); box-shadow: 0 0 20px rgba(99,102,241,0.3); }
+    
+    .token-stat { font-family: var(--font-mono); font-size: 11px; color: var(--accent-emerald); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="popup-header">
+    <div class="logo">
+      <div class="logo-icon">🛡️</div>
+      <span>ContextArmor AI</span>
+    </div>
+    <div class="status-badge status-offline" id="backend-status">
+      <span id="status-dot">●</span>
+      <span id="status-text">Checking...</span>
+    </div>
+  </div>
+
+  <!-- KPI Metrics -->
+  <div class="section">
+    <div class="section-title">Protection Stats</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-scans">—</div>
+        <div class="kpi-label">Scans Run</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-blocked" style="color: var(--accent-crimson)">—</div>
+        <div class="kpi-label">Threats Blocked</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-tokens" style="color: var(--accent-emerald)">—</div>
+        <div class="kpi-label">Tokens Saved</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-risk" style="color: var(--accent-amber)">—</div>
+        <div class="kpi-label">Avg Risk Score</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Toggles -->
+  <div class="section">
+    <div class="section-title">Settings</div>
+    <div class="toggle-row">
+      <span class="toggle-label">🔒 Auto-Intercept PII</span>
+      <button class="toggle-switch active" id="toggle-auto-intercept" aria-label="Toggle Auto-Intercept PII"></button>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">📐 AST Signature Pruning</span>
+      <button class="toggle-switch" id="toggle-signature" aria-label="Toggle AST Signature Pruning"></button>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="section">
+    <div class="section-title">Quick Actions</div>
+    <button class="quick-action-btn" id="btn-scrape-transfer">
+      <span>📦</span>
+      <span>Scrape &amp; Transfer Current Tab Chat</span>
+      <span id="transfer-spinner" style="display:none">⏳</span>
+    </button>
+    
+    <div id="transfer-output" class="output-preview"></div>
+    <div id="transfer-actions" class="action-row" style="display:none">
+      <button class="btn-sm" id="btn-copy-bridge">📋 Copy</button>
+      <button class="btn-sm primary" id="btn-open-fresh">🚀 Open Fresh Chat</button>
+    </div>
+  </div>
+
+  <!-- Quick Optimizer -->
+  <div class="section">
+    <div class="section-title">Quick Optimizer</div>
+    <textarea class="mini-input" id="quick-input" placeholder="Paste any prompt or code snippet to optimize..."></textarea>
+    <div class="action-row">
+      <button class="btn-sm" id="btn-scan-quick">🛡️ Scan</button>
+      <button class="btn-sm primary" id="btn-optimize-quick">✨ Optimize</button>
+    </div>
+    <div id="quick-output" class="output-preview"></div>
+    <div id="quick-token-stat" class="token-stat" style="display:none"></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="section">
+    <button class="dashboard-btn" id="btn-open-dashboard">
+      📊 Open Full Dashboard &amp; Live Demo ↗
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
