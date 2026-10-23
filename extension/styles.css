@@ -825,3 +825,56 @@ pre.ca-code {
   color:          var(--text-muted);
   margin-bottom:  8px;
 }
+
+/* -------------------------------------------------------------------------
+   21. Dynamic Animations & Glassmorphism Tokens
+   ------------------------------------------------------------------------- */
+@keyframes ca-pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 24px rgba(99, 102, 241, 0.8), 0 0 36px rgba(139, 92, 246, 0.5);
+  }
+}
+
+@keyframes ca-aurora-sweep {
+  0% { transform: translate(-10%, -10%) rotate(0deg) scale(1); }
+  50% { transform: translate(15%, 10%) rotate(180deg) scale(1.2); }
+  100% { transform: translate(-10%, -10%) rotate(360deg) scale(1); }
+}
+
+@keyframes ca-shimmer-sweep {
+  0% { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(250%) skewX(-20deg); }
+}
+
+@keyframes ca-gauge-rotate {
+  from { stroke-dashoffset: 283; }
+}
+
+.ca-glass-blur {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 32px rgba(8, 14, 38, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+.ca-ring-gauge {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ca-interactive-card {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.ca-interactive-card:hover {
+  transform: translateY(-3px) scale(1.01);
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 16px 36px rgba(10, 18, 52, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
