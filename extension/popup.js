@@ -26,6 +26,72 @@ function sendToBackground(action, data = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Interactive Ambient Particle Engine
+// ---------------------------------------------------------------------------
+
+function initParticlesCanvas() {
+  const canvas = document.getElementById('particles-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let width = canvas.width = canvas.parentElement.offsetWidth || 400;
+  let height = canvas.height = canvas.parentElement.offsetHeight || 600;
+
+  window.addEventListener('resize', () => {
+    if (!canvas.parentElement) return;
+    width = canvas.width = canvas.parentElement.offsetWidth || 400;
+    height = canvas.height = canvas.parentElement.offsetHeight || 600;
+  });
+
+  const count = 26;
+  const particles = [];
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      radius: Math.random() * 1.8 + 1,
+      alpha: Math.random() * 0.45 + 0.2,
+    });
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, width, height);
+    for (let i = 0; i < count; i++) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = width;
+      if (p.x > width) p.x = 0;
+      if (p.y < 0) p.y = height;
+      if (p.y > height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(186, 215, 255, ${p.alpha})`;
+      ctx.fill();
+
+      for (let j = i + 1; j < count; j++) {
+        const p2 = particles[j];
+        const dx = p.x - p2.x;
+        const dy = p.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 65) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = `rgba(147, 197, 253, ${0.16 * (1 - dist / 65)})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+}
+
+// ---------------------------------------------------------------------------
 // Number formatting
 // ---------------------------------------------------------------------------
 
@@ -67,6 +133,46 @@ async function checkBackendStatus() {
 }
 
 // ---------------------------------------------------------------------------
+// Animated Counters & Number Formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Animate a numeric element from 0 to target value with easing.
+ * @param {HTMLElement} element
+ * @param {number} target
+ * @param {boolean} isDecimal
+ * @param {number} duration
+ */
+function animateCounter(element, target, isDecimal = false, duration = 650) {
+  if (!element) return;
+  const num = Number(target) || 0;
+  if (num === 0) {
+    element.textContent = isDecimal ? '0.0' : '0';
+    return;
+  }
+  const startTime = performance.now();
+  function update(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    // Ease-out cubic
+    const factor = 1 - Math.pow(1 - progress, 3);
+    const currentVal = num * factor;
+    if (isDecimal) {
+      element.textContent = currentVal.toFixed(1);
+    } else if (num >= 1000) {
+      element.textContent = (currentVal / 1000).toFixed(1) + 'k';
+    } else {
+      element.textContent = String(Math.round(currentVal));
+    }
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      element.textContent = isDecimal ? num.toFixed(1) : formatNumber(num);
+    }
+  }
+  requestAnimationFrame(update);
+}
+
+// ---------------------------------------------------------------------------
 // Analytics / KPI cards
 // ---------------------------------------------------------------------------
 
@@ -90,12 +196,12 @@ async function loadAnalytics() {
   const tokensEl = document.getElementById('kpi-tokens');
   const riskEl = document.getElementById('kpi-risk');
 
-  if (scansEl) scansEl.textContent = formatNumber(totalScans);
-  if (blockedEl) blockedEl.textContent = formatNumber(Number(data.threats_blocked) || 0);
-  if (tokensEl) tokensEl.textContent = formatNumber(Number(data.total_tokens_saved) || 0);
+  if (scansEl) animateCounter(scansEl, totalScans, false);
+  if (blockedEl) animateCounter(blockedEl, Number(data.threats_blocked) || 0, false);
+  if (tokensEl) animateCounter(tokensEl, Number(data.total_tokens_saved) || 0, false);
   if (riskEl) {
-    const avg = data.average_risk_score;
-    riskEl.textContent = avg != null ? Number(avg).toFixed(1) : '0.0';
+    const avg = data.average_risk_score != null ? Number(data.average_risk_score) : 0;
+    animateCounter(riskEl, avg, true);
   }
 }
 
@@ -387,10 +493,60 @@ function setupQuickOptimizer() {
 }
 
 // ---------------------------------------------------------------------------
+// View Navigation (Hero Showcase vs Control Center)
+// ---------------------------------------------------------------------------
+
+function setupViewNavigation() {
+  const tabOverview = document.getElementById('tab-overview');
+  const tabControls = document.getElementById('tab-controls');
+  const viewHero = document.getElementById('view-hero');
+  const viewControls = document.getElementById('view-controls');
+  const btnGetStarted = document.getElementById('btn-get-started');
+  const btnBackToHero = document.getElementById('btn-back-to-hero');
+  const btnClose = document.getElementById('btn-close-popup');
+
+  function switchView(target) {
+    if (target === 'controls') {
+      if (viewHero) viewHero.classList.remove('active-view');
+      if (viewControls) viewControls.classList.add('active-view');
+      if (tabOverview) tabOverview.classList.remove('active');
+      if (tabControls) tabControls.classList.add('active');
+      loadAnalytics();
+    } else {
+      if (viewControls) viewControls.classList.remove('active-view');
+      if (viewHero) viewHero.classList.add('active-view');
+      if (tabControls) tabControls.classList.remove('active');
+      if (tabOverview) tabOverview.classList.add('active');
+    }
+  }
+
+  if (tabOverview) tabOverview.addEventListener('click', () => switchView('hero'));
+  if (tabControls) tabControls.addEventListener('click', () => switchView('controls'));
+  if (btnGetStarted) btnGetStarted.addEventListener('click', () => switchView('controls'));
+  if (btnBackToHero) btnBackToHero.addEventListener('click', () => switchView('hero'));
+
+  // Quick navigation when clicking feature rows
+  ['feat-guardrails', 'feat-compression', 'feat-transfer'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => switchView('controls'));
+    }
+  });
+
+  // Close button
+  if (btnClose) {
+    btnClose.addEventListener('click', () => {
+      window.close();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  setupViewNavigation();
   await checkBackendStatus();
   await loadAnalytics();
 
@@ -398,7 +554,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupTransfer();
   setupQuickOptimizer();
 
-  document.getElementById('btn-open-dashboard').addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-  });
+  const openDashBtn = document.getElementById('btn-open-dashboard');
+  if (openDashBtn) {
+    openDashBtn.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+    });
+  }
 });
