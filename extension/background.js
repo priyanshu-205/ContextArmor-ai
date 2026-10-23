@@ -59,15 +59,20 @@ function updateBadge(tabId, riskScore, action) {
 
   if (action === 'BLOCK') {
     chrome.action.setBadgeBackgroundColor({ color: '#EF4444', tabId });
-    chrome.action.setBadgeText({ text: '🛡', ...badgeOpts });
+    chrome.action.setBadgeText({ text: '!', ...badgeOpts });
   } else if (action === 'WARN') {
     chrome.action.setBadgeBackgroundColor({ color: '#F59E0B', tabId });
     chrome.action.setBadgeText({ text: '!', ...badgeOpts });
   } else {
-    chrome.action.setBadgeBackgroundColor({ color: '#10B981', tabId });
-    chrome.action.setBadgeText({ text: '✓', ...badgeOpts });
+    // Clean/normal state: clear any badge text overlay so the 🛡️ shield icon is fully visible
+    chrome.action.setBadgeText({ text: '', ...badgeOpts });
   }
 }
+
+// Clear badge text by default on startup/install so the shield icon displays cleanly
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.action.setBadgeText({ text: '' });
+});
 
 // ---------------------------------------------------------------------------
 // 3. Message listener
