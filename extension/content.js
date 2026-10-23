@@ -9,6 +9,17 @@ let hudHost = null;
 let shadowRoot = null;
 let isBackendOnline = false;
 let liveScanSequence = 0;
+let isBypassingSubmit = false;
+let isEditorBlurred = false;
+
+let policySettings = {
+  warn_threshold: 30,
+  block_threshold: 70,
+  enabled_rules: ['PII', 'SECRET', 'PROMPT_INJECTION'],
+  restricted_websites: [],
+  auto_redact_on_send: false,
+  fail_closed: false
+};
 
 // ─── Platform Detection ───────────────────────────────────────────────────────
 
@@ -20,12 +31,34 @@ function detectPlatform() {
   return 'unknown';
 }
 
-// ─── Prompt Input Selectors ───────────────────────────────────────────────────
+// ─── Prompt Input & Send Button Selectors ─────────────────────────────────────
 
 const SELECTORS = {
   chatgpt: ['#prompt-textarea', 'textarea[data-id="root"]', '[contenteditable="true"][data-placeholder*="Message"]', 'form [contenteditable="true"]'],
   claude: ['div[contenteditable="true"].ProseMirror', 'fieldset div[contenteditable="true"]', 'div[contenteditable="true"][data-placeholder]'],
   gemini: ['rich-textarea div[contenteditable="true"]', 'div.ql-editor[contenteditable="true"]', 'rich-textarea textarea']
+};
+
+const SEND_SELECTORS = {
+  chatgpt: [
+    'button[data-testid="send-button"]',
+    'button[aria-label="Send prompt"]',
+    'button[aria-label="Send message"]',
+    'form button[type="submit"]',
+    'button[data-testid="fruitjuice-send-button"]'
+  ],
+  claude: [
+    'button[aria-label="Send Message"]',
+    'button[aria-label="Send message"]',
+    'fieldset button:last-of-type',
+    'button:has(svg[data-icon="arrow-up"])'
+  ],
+  gemini: [
+    'button.send-button',
+    'button[aria-label*="Send"]',
+    'button[aria-label*="Submit"]',
+    '.send-button-container button'
+  ]
 };
 
 function findPromptInput() {
@@ -227,61 +260,245 @@ async function checkBackendStatus() {
 
 // ─── Client-Side Scan ─────────────────────────────────────────────────────────
 
+// ─── Client-Side Scan & Redact ────────────────────────────────────────────────
+
 function clientSideScan(text) {
   if (!text || typeof text !== 'string') {
-    return { riskScore: 0, action: 'ALLOW', hasPII: false, hasSecret: false, hasInjection: false };
+    return { riskScore: 0, action: 'ALLOW', findings: [], hasPII: false, hasSecret: false, hasInjection: false };
   }
+
+  const findings = [];
 
   // PII patterns
   const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
-  const phoneRegex = /(\+?1?\s?)?(\(?\d{3}\)?[\s.\-]?)(\d{3}[\s.\-]?\d{4})/g;
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
   const ssnRegex = /\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g;
+  const ipv4Regex = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
+  const aadhaarRegex = /\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b/g;
+  const panRegex = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g;
   const creditCardRegex = /\b(?:\d{4}[\s\-]?){3}\d{4}\b/g;
 
   // Secret patterns
   const openAIKeyRegex = /\bsk-[a-zA-Z0-9]{20,}\b/g;
   const awsKeyRegex = /\bAKIA[A-Z0-9]{16}\b/g;
   const githubTokenRegex = /\bghp_[a-zA-Z0-9]{36}\b/g;
-  const genericSecretRegex = /\b(api[_-]?key|secret[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*['"]?[a-zA-Z0-9+/\-_]{8,}/gi;
+  const bearerTokenRegex = /\bBearer\s+[a-zA-Z0-9_\-\.]{25,}\b/g;
+  const dbUrlRegex = /\b(?:postgres|mysql|mongodb(?:\+srv)?):\/\/[^\s"']+:[^\s"']+@[^\s"']+\b/g;
+  const genericSecretRegex = /\b(?:api[_-]?key|secret[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*['"]?[a-zA-Z0-9+/\-_]{8,}/gi;
+  const passwordRegex = /\b(?:password|passwd|pwd|secret)\s*[:=]\s*['"]?([^\s'"]{6,})['"]?/gi;
 
-  // Prompt injection patterns
-  const injectionPatterns = [
-    /ignore\s+all\s+previous\s+(instructions?|prompts?|rules?)/gi,
-    /disregard\s+(all\s+)?(previous\s+)?(instructions?|context)/gi,
-    /you\s+are\s+now\s+(a\s+)?(different|new)\s+(ai|assistant|bot|model)/gi,
-    /forget\s+(everything|all|your)\s+(you|previous|prior)/gi,
-    /act\s+as\s+if\s+you\s+(have\s+no|don't\s+have)\s+(restrictions?|rules?|guidelines?)/gi,
-    /jailbreak/gi,
-    /\bDAN\b/g,
-    /do\s+anything\s+now/gi,
-    /override\s+(your\s+)?(safety|content)\s+(filter|policy|restriction)/gi
-  ];
+  let m;
+  while ((m = emailRegex.exec(text)) !== null) findings.push({ type: 'EMAIL', match: m[0], severity: 'MEDIUM' });
+  while ((m = phoneRegex.exec(text)) !== null) findings.push({ type: 'PHONE', match: m[0], severity: 'MEDIUM' });
+  while ((m = ipv4Regex.exec(text)) !== null) {
+    if (m[0] !== '127.0.0.1' && m[0] !== '0.0.0.0' && m[0] !== '255.255.255.255') {
+      findings.push({ type: 'IPV4_ADDRESS', match: m[0], severity: 'LOW' });
+    }
+  }
+  while ((m = aadhaarRegex.exec(text)) !== null) findings.push({ type: 'AADHAAR_ID', match: m[0], severity: 'HIGH' });
+  while ((m = panRegex.exec(text)) !== null) findings.push({ type: 'PAN_CARD', match: m[0], severity: 'HIGH' });
+  while ((m = ssnRegex.exec(text)) !== null) findings.push({ type: 'SSN', match: m[0], severity: 'HIGH' });
+  while ((m = creditCardRegex.exec(text)) !== null) findings.push({ type: 'CREDIT_CARD', match: m[0], severity: 'HIGH' });
 
-  const hasMatch = (pattern) => {
-    pattern.lastIndex = 0;
-    const matched = pattern.test(text);
-    pattern.lastIndex = 0;
-    return matched;
-  };
-  const hasPII = [emailRegex, phoneRegex, ssnRegex, creditCardRegex].some(hasMatch);
-  const hasSecret = [openAIKeyRegex, awsKeyRegex, githubTokenRegex, genericSecretRegex].some(hasMatch);
-  const hasInjection = injectionPatterns.some(hasMatch);
-
-  let riskScore = 0;
-  if (hasPII)       riskScore += 25;
-  if (hasSecret)    riskScore += 40;
-  if (hasInjection) riskScore += 35;
-
-  let action;
-  if (riskScore >= 60) {
-    action = 'BLOCK';
-  } else if (riskScore > 0) {
-    action = 'WARN';
-  } else {
-    action = 'ALLOW';
+  while ((m = openAIKeyRegex.exec(text)) !== null) findings.push({ type: 'OPENAI_API_KEY', match: m[0], severity: 'CRITICAL' });
+  while ((m = awsKeyRegex.exec(text)) !== null) findings.push({ type: 'AWS_ACCESS_KEY', match: m[0], severity: 'CRITICAL' });
+  while ((m = githubTokenRegex.exec(text)) !== null) findings.push({ type: 'GITHUB_TOKEN', match: m[0], severity: 'CRITICAL' });
+  while ((m = bearerTokenRegex.exec(text)) !== null) findings.push({ type: 'BEARER_TOKEN', match: m[0], severity: 'CRITICAL' });
+  while ((m = dbUrlRegex.exec(text)) !== null) findings.push({ type: 'DATABASE_URL', match: m[0], severity: 'CRITICAL' });
+  while ((m = genericSecretRegex.exec(text)) !== null) findings.push({ type: 'GENERIC_SECRET', match: m[0], severity: 'HIGH' });
+  while ((m = passwordRegex.exec(text)) !== null) {
+    const val = (m[1] || '').toLowerCase();
+    if (!['password', '123456', 'your_password', 'yourpassword', 'string', 'example', 'secret'].includes(val)) {
+      findings.push({ type: 'PLAINTEXT_PASSWORD', match: m[0], severity: 'CRITICAL' });
+    }
   }
 
-  return { riskScore, action, hasPII, hasSecret, hasInjection };
+  // Prompt injection
+  const isBenignContext = /(?:example|sample|test|explain|demonstrate|detection|research|paper|prevent|mitigate|defense)\s+(?:of|for|against)?\s*(?:prompt\s+injection|jailbreak|jailbreaking)/i.test(text);
+
+  if (!isBenignContext) {
+    const injectionPatterns = [
+      { pattern: /ignore\s+all\s+previous\s+(instructions?|prompts?|rules?)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /disregard\s+(all\s+)?(previous\s+)?(instructions?|context)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /you\s+are\s+now\s+(a\s+)?(different|new|DAN|unrestricted)\s+(ai|assistant|bot|model|persona)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /forget\s+(everything|all|your)\s+(you|previous|prior)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /act\s+as\s+if\s+you\s+(have\s+no|don't\s+have)\s+(restrictions?|rules?|guidelines?)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /\bDAN\b|do\s+anything\s+now/gi, type: 'JAILBREAK_ATTEMPT' },
+      { pattern: /system\s*prompt\s*override/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /override\s+(your\s+)?(safety|content)\s+(filter|policy|restriction)/gi, type: 'PROMPT_INJECTION' },
+      { pattern: /output\s+(your\s+)?(initial|original|system)\s+(prompt|instructions)/gi, type: 'SYSTEM_PROMPT_LEAK' }
+    ];
+
+    for (const item of injectionPatterns) {
+      if (item.pattern.test(text)) {
+        findings.push({ type: item.type, match: 'Injection sequence detected', severity: 'HIGH' });
+        break;
+      }
+    }
+  }
+
+  const hasPII = findings.some(f => ['EMAIL', 'PHONE', 'IPV4_ADDRESS', 'AADHAAR_ID', 'PAN_CARD', 'SSN', 'CREDIT_CARD'].includes(f.type));
+  const hasSecret = findings.some(f => ['OPENAI_API_KEY', 'AWS_ACCESS_KEY', 'GITHUB_TOKEN', 'BEARER_TOKEN', 'DATABASE_URL', 'GENERIC_SECRET', 'PLAINTEXT_PASSWORD'].includes(f.type));
+  const hasInjection = findings.some(f => ['PROMPT_INJECTION', 'JAILBREAK_ATTEMPT', 'SYSTEM_PROMPT_LEAK'].includes(f.type));
+
+  let riskScore = 0;
+  if (hasInjection) riskScore += 75;
+  if (hasSecret) riskScore += 75;
+  if (findings.some(f => ['AADHAAR_ID', 'PAN_CARD', 'SSN', 'CREDIT_CARD'].includes(f.type))) riskScore += 50;
+  if (findings.some(f => ['EMAIL', 'PHONE', 'IPV4_ADDRESS'].includes(f.type))) riskScore += 30;
+  riskScore = Math.min(100, riskScore);
+
+  const warnTh = policySettings.warn_threshold || 30;
+  const blockTh = policySettings.block_threshold || 70;
+
+  let action = 'ALLOW';
+  if (riskScore >= blockTh) {
+    action = 'BLOCK';
+  } else if (riskScore >= warnTh) {
+    action = 'WARN';
+  }
+
+  return { riskScore, action, findings, hasPII, hasSecret, hasInjection };
+}
+
+function clientSideRedact(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]')
+    .replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[REDACTED_PHONE]')
+    .replace(/\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b/g, '[REDACTED_AADHAAR]')
+    .replace(/\b[A-Z]{5}[0-9]{4}[A-Z]\b/g, '[REDACTED_PAN]')
+    .replace(/\b(?:\d{4}[\s\-]?){3}\d{4}\b/g, '[REDACTED_CREDIT_CARD]')
+    .replace(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g, (m) => {
+      return (m === '127.0.0.1' || m === '0.0.0.0') ? m : '[REDACTED_IPV4]';
+    })
+    .replace(/\bsk-[a-zA-Z0-9]{20,}\b/g, '[REDACTED_OPENAI_KEY]')
+    .replace(/\bAKIA[A-Z0-9]{16}\b/g, '[REDACTED_AWS_KEY]')
+    .replace(/\bghp_[a-zA-Z0-9]{36}\b/g, '[REDACTED_GITHUB_TOKEN]')
+    .replace(/\bBearer\s+[a-zA-Z0-9_\-\.]{25,}\b/g, '[REDACTED_BEARER_TOKEN]')
+    .replace(/\b(?:postgres|mysql|mongodb(?:\+srv)?):\/\/[^\s"']+:[^\s"']+@[^\s"']+\b/g, '[REDACTED_DATABASE_URL]')
+    .replace(/\b((?:password|passwd|pwd|secret)\s*[:=]\s*['"]?)[^\s'"]{6,}(['"]?)/gi, '$1[REDACTED_PASSWORD]$2');
+}
+
+// ─── Security Warning and Block Modals ────────────────────────────────────────
+
+function showWarningModal(scanResult, text, inputEl) {
+  if (!shadowRoot) return;
+  const existing = shadowRoot.querySelector('#ca-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ca-modal-overlay';
+
+  const badges = (scanResult.findings || []).map(f => {
+    const cls = f.severity === 'CRITICAL' ? 'badge-critical' : f.severity === 'HIGH' ? 'badge-high' : 'badge-medium';
+    return `<span class="modal-badge ${cls}">${escapeHtml(f.type)}</span>`;
+  }).join(' ');
+
+  overlay.innerHTML = `
+    <div id="ca-modal">
+      <h3 style="color:#fcd34d;">⚠️ Security Warning: Sensitive Data Detected</h3>
+      <div id="ca-modal-stats">Risk Score: <strong>${scanResult.riskScore}/100</strong> (Threshold: ${policySettings.warn_threshold || 30})</div>
+      <div style="margin: 8px 0 12px 0;">${badges || '<span class="modal-badge badge-high">SENSITIVE_CONTENT</span>'}</div>
+      <p style="font-size:13px;line-height:1.5;color:rgba(255,255,255,0.85);margin-bottom:12px;">
+        Your prompt contains potential credentials or personal identifiers that could be transmitted to the AI provider.
+      </p>
+      <div class="modal-btns">
+        <button class="modal-btn modal-btn-primary" id="ca-btn-redact-submit">🛡️ Redact &amp; Send</button>
+        <button class="modal-btn modal-btn-warning" id="ca-btn-proceed-anyway">⚠️ Proceed Anyway</button>
+        <button class="modal-btn modal-btn-close" id="ca-btn-cancel-modal">✕ Cancel</button>
+      </div>
+    </div>
+  `;
+
+  shadowRoot.appendChild(overlay);
+
+  overlay.querySelector('#ca-btn-redact-submit').addEventListener('click', () => {
+    overlay.remove();
+    const sanitized = clientSideRedact(text);
+    setPromptInputValue(inputEl, sanitized);
+    showToast('Prompt redacted & submitted safely', 'success');
+    triggerActualSubmit(inputEl);
+  });
+
+  overlay.querySelector('#ca-btn-proceed-anyway').addEventListener('click', () => {
+    overlay.remove();
+    showToast('Proceeding without redaction', 'warning');
+    triggerActualSubmit(inputEl);
+  });
+
+  overlay.querySelector('#ca-btn-cancel-modal').addEventListener('click', () => {
+    overlay.remove();
+    if (inputEl && inputEl.focus) inputEl.focus();
+  });
+}
+
+function showBlockedModal(scanResult, text, inputEl) {
+  if (!shadowRoot) return;
+  const existing = shadowRoot.querySelector('#ca-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ca-modal-overlay';
+
+  const badges = (scanResult.findings || []).map(f => {
+    const cls = f.severity === 'CRITICAL' ? 'badge-critical' : 'badge-high';
+    return `<span class="modal-badge ${cls}">${escapeHtml(f.type)}</span>`;
+  }).join(' ');
+
+  overlay.innerHTML = `
+    <div id="ca-modal">
+      <h3 style="color:#f87171;">🚨 Submission Blocked by Policy</h3>
+      <div id="ca-modal-stats">Critical Risk Score: <strong>${scanResult.riskScore}/100</strong> (Block Threshold: ${policySettings.block_threshold || 70})</div>
+      <div style="margin: 8px 0 12px 0;">${badges || '<span class="modal-badge badge-critical">HIGH_RISK_THREAT</span>'}</div>
+      <p style="font-size:13px;line-height:1.5;color:rgba(255,255,255,0.85);margin-bottom:12px;">
+        Submission was prevented because high-risk secrets or prompt injection patterns were detected.
+      </p>
+      <div class="modal-btns">
+        <button class="modal-btn modal-btn-primary" id="ca-btn-redact-review">🛡️ Redact &amp; Review</button>
+        <button class="modal-btn modal-btn-close" id="ca-btn-dismiss-block">✕ Dismiss</button>
+      </div>
+    </div>
+  `;
+
+  shadowRoot.appendChild(overlay);
+
+  overlay.querySelector('#ca-btn-redact-review').addEventListener('click', () => {
+    overlay.remove();
+    const sanitized = clientSideRedact(text);
+    setPromptInputValue(inputEl, sanitized);
+    showToast('Sensitive patterns replaced with placeholders in editor', 'success');
+    if (inputEl && inputEl.focus) inputEl.focus();
+  });
+
+  overlay.querySelector('#ca-btn-dismiss-block').addEventListener('click', () => {
+    overlay.remove();
+    if (inputEl && inputEl.focus) inputEl.focus();
+  });
+}
+
+function showRestrictedWebsiteModal(domain) {
+  if (!shadowRoot) return;
+  const existing = shadowRoot.querySelector('#ca-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ca-modal-overlay';
+
+  overlay.innerHTML = `
+    <div id="ca-modal">
+      <h3 style="color:#f87171;">🚫 Domain Restricted by Security Policy</h3>
+      <p style="font-size:13px;line-height:1.5;color:rgba(255,255,255,0.85);margin:12px 0;">
+        Submitting AI prompts to <strong>${escapeHtml(domain)}</strong> is restricted by your active ContextArmor policy.
+      </p>
+      <div class="modal-btns">
+        <button class="modal-btn modal-btn-close" id="ca-btn-close-restricted">✕ Dismiss</button>
+      </div>
+    </div>
+  `;
+
+  shadowRoot.appendChild(overlay);
+  overlay.querySelector('#ca-btn-close-restricted').addEventListener('click', () => overlay.remove());
 }
 
 // ─── HUD Status Update ────────────────────────────────────────────────────────
@@ -469,10 +686,18 @@ function createHudHTML() {
   }
   .modal-btn-primary { background: #11141a; color: #fff; border-color: rgba(255,255,255,0.25); }
   .modal-btn-primary:hover { background: #191e28; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .modal-btn-danger { background: #DC2626; color: #fff; border-color: rgba(255,255,255,0.25); }
+  .modal-btn-danger:hover { background: #B91C1C; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(220,38,38,0.4); }
+  .modal-btn-warning { background: #D97706; color: #fff; border-color: rgba(255,255,255,0.25); }
+  .modal-btn-warning:hover { background: #B45309; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(217,119,6,0.4); }
   .modal-btn-secondary { background: rgba(255,255,255,0.12); color: #ffffff; border-color: rgba(255,255,255,0.2); }
   .modal-btn-secondary:hover { background: rgba(255,255,255,0.2); }
   .modal-btn-close { background: transparent; color: rgba(255,255,255,0.6); border: none; }
   .modal-btn-close:hover { color: #F9FAFB; }
+  .modal-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-right: 6px; margin-bottom: 6px; }
+  .badge-critical { background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
+  .badge-high { background: rgba(245, 158, 11, 0.25); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
+  .badge-medium { background: rgba(59, 130, 246, 0.25); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
 </style>
 <div id="ca-hud" style="display:none;">
   <div id="ca-status-pill" class="pulse-dot pill-green">🛡️ ContextArmor Active</div>
@@ -480,6 +705,7 @@ function createHudHTML() {
     <button class="ca-btn" id="ca-redact-btn">🛡️ Auto-Redact PII</button>
     <button class="ca-btn ca-btn-primary" id="ca-optimize-btn">✨ Optimize &amp; Compress</button>
     <button class="ca-btn" id="ca-transfer-btn">📦 Transfer Chat</button>
+    <button class="ca-btn" id="ca-blur-btn">🙈 Blur/Unblur Editor</button>
   </div>
 </div>
 `;
@@ -747,6 +973,159 @@ function injectHud() {
       transferBtn.textContent = '📦 Transfer Chat';
     }
   });
+  // ── Blur/Unblur Editor button ───────────────────────────────────────────
+  const blurBtn = shadowRoot.querySelector('#ca-blur-btn');
+  if (blurBtn) {
+    blurBtn.addEventListener('click', () => {
+      const input = currentInput || findPromptInput();
+      if (!input) {
+        showToast('No prompt editor found to blur', 'warning');
+        return;
+      }
+      toggleEditorBlur(input);
+    });
+  }
+}
+
+function toggleEditorBlur(inputEl) {
+  if (!inputEl) return;
+  isEditorBlurred = !isEditorBlurred;
+  if (isEditorBlurred) {
+    inputEl.style.filter = 'blur(6px)';
+    inputEl.style.transition = 'filter 0.2s ease';
+    showToast('Prompt editor blurred for privacy', 'success');
+  } else {
+    inputEl.style.filter = 'none';
+    showToast('Prompt editor unblurred', 'success');
+  }
+}
+
+// ─── Pre-Submission Interception ──────────────────────────────────────────────
+
+function handleGlobalKeydown(event) {
+  if (isBypassingSubmit) return;
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+
+  const input = currentInput || findPromptInput();
+  if (!input) return;
+
+  const isInputTarget = event.target === input || input.contains(event.target);
+  if (!isInputTarget) return;
+
+  interceptSubmission(event, input);
+}
+
+function handleGlobalClick(event) {
+  if (isBypassingSubmit) return;
+
+  const platform = detectPlatform();
+  const sendSelectors = SEND_SELECTORS[platform] || ['button[type="submit"]'];
+  let isSendClick = false;
+
+  for (const sel of sendSelectors) {
+    try {
+      if (event.target.closest && event.target.closest(sel)) {
+        isSendClick = true;
+        break;
+      }
+    } catch (_) {}
+  }
+
+  if (!isSendClick) return;
+
+  const input = currentInput || findPromptInput();
+  if (!input) return;
+
+  interceptSubmission(event, input);
+}
+
+function interceptSubmission(event, inputEl) {
+  const text = getPromptText(inputEl);
+  if (!text || text.trim().length === 0) return;
+
+  const startTime = performance.now();
+
+  // Check website restrictions
+  const currentHost = window.location.hostname;
+  if (policySettings.restricted_websites && policySettings.restricted_websites.some(w => currentHost.includes(w))) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    showRestrictedWebsiteModal(currentHost);
+    return;
+  }
+
+  const scanResult = clientSideScan(text);
+  const latency = performance.now() - startTime;
+  window.__ca_interception_latency = latency;
+
+  if (policySettings.auto_redact_on_send && scanResult.hasPII && scanResult.action !== 'BLOCK') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const redacted = clientSideRedact(text);
+    setPromptInputValue(inputEl, redacted);
+    showToast('Prompt auto-redacted before sending', 'success');
+    triggerActualSubmit(inputEl);
+    return;
+  }
+
+  if (scanResult.action === 'BLOCK') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    showBlockedModal(scanResult, text, inputEl);
+    return;
+  }
+
+  if (scanResult.action === 'WARN') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    showWarningModal(scanResult, text, inputEl);
+    return;
+  }
+
+  // ALLOW: event continues normally
+}
+
+function triggerActualSubmit(inputEl) {
+  isBypassingSubmit = true;
+  const platform = detectPlatform();
+  const sendSelectors = SEND_SELECTORS[platform] || ['button[type="submit"]'];
+  let clicked = false;
+  for (const sel of sendSelectors) {
+    try {
+      const btn = document.querySelector(sel);
+      if (btn && (btn.offsetHeight > 0 || btn.offsetWidth > 0) && !btn.disabled) {
+        btn.click();
+        clicked = true;
+        break;
+      }
+    } catch (_) {}
+  }
+
+  if (!clicked && inputEl) {
+    inputEl.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true
+    }));
+  }
+
+  setTimeout(() => {
+    isBypassingSubmit = false;
+  }, 400);
+}
+
+async function loadPolicySettings() {
+  try {
+    const res = await sendToBackground({ action: 'get_settings' });
+    if (res && typeof res === 'object') {
+      policySettings = { ...policySettings, ...res };
+    }
+  } catch (_) {
+    // Keep local default policy
+  }
 }
 
 /** Sends a message to the background service worker and returns the response */
@@ -824,14 +1203,13 @@ function handleInput(event) {
           const apiLabel = result.risk_label || result.risk_action;
           updateHudStatus(result.risk_action, apiLabel);
         } else if (result && result.risk_score !== undefined) {
-          // Derive action from score
           let action = 'ALLOW';
-          if (result.risk_score >= 60) action = 'BLOCK';
-          else if (result.risk_score >= 20) action = 'WARN';
+          if (result.risk_score >= (policySettings.block_threshold || 70)) action = 'BLOCK';
+          else if (result.risk_score >= (policySettings.warn_threshold || 30)) action = 'WARN';
           updateHudStatus(action, `Score: ${result.risk_score}`);
         }
       } catch (_) {
-        // Backend scan failed — client-side result already shown, keep it
+        // Backend scan failed — client-side result already shown
       }
     }
   }, 300);
@@ -840,7 +1218,6 @@ function handleInput(event) {
 // ─── MutationObserver Setup ───────────────────────────────────────────────────
 
 function initObserver() {
-  // Try immediately in case the input is already present
   const initialInput = findPromptInput();
   if (initialInput) {
     attachToInput(initialInput);
@@ -857,7 +1234,6 @@ function initObserver() {
 }
 
 function attachToInput(input) {
-  // Remove listener from old input if any
   if (currentInput && currentInput !== input) {
     currentInput.removeEventListener('input', handleInput);
     currentInput.removeEventListener('keyup', handleInput);
@@ -865,8 +1241,12 @@ function attachToInput(input) {
 
   currentInput = input;
   currentInput.addEventListener('input', handleInput);
-  // keyup as fallback for contenteditable elements that may not fire 'input'
   currentInput.addEventListener('keyup', handleInput);
+  currentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      handleGlobalKeydown(e);
+    }
+  }, true);
 
   if (!hudInjected) {
     injectHud();
@@ -878,20 +1258,25 @@ function attachToInput(input) {
 // ─── Initialization ───────────────────────────────────────────────────────────
 
 async function init() {
-  // Only run on supported platforms
   const platform = detectPlatform();
   if (platform === 'unknown') return;
 
-  // Initial backend check
   await checkBackendStatus();
+  await loadPolicySettings();
 
-  // Set up the observer
+  // Attach global capture phase interception listeners
+  window.addEventListener('keydown', handleGlobalKeydown, true);
+  window.addEventListener('click', handleGlobalClick, true);
+
   initObserver();
 
-  // Re-check backend status every 30 seconds
+  // Periodic status and policy check
   setInterval(async () => {
     const wasOnline = isBackendOnline;
     await checkBackendStatus();
+    if (isBackendOnline) {
+      await loadPolicySettings();
+    }
     if (wasOnline !== isBackendOnline && shadowRoot) {
       if (isBackendOnline) {
         showToast('ContextArmor backend connected', 'success');
@@ -901,7 +1286,6 @@ async function init() {
     }
   }, 30000);
 
-  // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
     if (hudHost && hudHost.parentNode) {
       hudHost.remove();

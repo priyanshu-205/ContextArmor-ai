@@ -119,7 +119,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
         case 'analytics': {
-          const result = await callAPI('/api/analytics', 'GET');
+          const params = new URLSearchParams();
+          if (msg.module) params.append('module', msg.module);
+          if (msg.action_filter) params.append('action', msg.action_filter);
+          if (msg.days) params.append('days', msg.days);
+          const queryString = params.toString() ? `?${params.toString()}` : '';
+          const result = await callAPI(`/api/analytics${queryString}`, 'GET');
+          sendResponse({ success: true, result });
+          break;
+        }
+
+        case 'get_settings': {
+          const result = await callAPI('/api/settings', 'GET');
+          sendResponse({ success: true, result });
+          break;
+        }
+
+        case 'save_settings': {
+          const result = await callAPI('/api/settings', 'POST', msg.settings || {});
           sendResponse({ success: true, result });
           break;
         }

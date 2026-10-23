@@ -468,13 +468,34 @@
   </div>
 
   <!-- Security Audit Log -->
+  <!-- Security Audit Log -->
   <div class="audit-section">
-    <div class="audit-header">
+    <div class="audit-header" style="flex-wrap:wrap;gap:12px;">
       <div>
         <div style="font-size:15px;font-weight:600;">🔐 Live Security Event Audit Log</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Last 25 events • Auto-refreshes every 30s</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Recent events • Auto-refreshes every 30s</div>
       </div>
-      <button id="btn-refresh-audit" style="padding:6px 14px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--font-sans);">↺ Refresh</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <select id="filter-module" style="background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">
+          <option value="">All Modules</option>
+          <option value="SCAN">SCAN</option>
+          <option value="OPTIMIZE">OPTIMIZE</option>
+          <option value="TRANSFER">TRANSFER</option>
+        </select>
+        <select id="filter-action" style="background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">
+          <option value="">All Actions</option>
+          <option value="ALLOW">ALLOW</option>
+          <option value="WARN">WARN</option>
+          <option value="BLOCK">BLOCK</option>
+        </select>
+        <select id="filter-days" style="background:var(--bg-elevated);border:1px solid var(--border-subtle);color:var(--text-primary);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">
+          <option value="">All Time</option>
+          <option value="1">Last 24 Hours</option>
+          <option value="7">Last 7 Days</option>
+          <option value="30">Last 30 Days</option>
+        </select>
+        <button id="btn-refresh-audit" style="padding:6px 14px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--font-sans);">↺ Refresh</button>
+      </div>
     </div>
     <div style="overflow-x:auto;">
       <table class="audit-table">
@@ -499,12 +520,53 @@
 
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settings-modal">
-  <div class="modal-box">
-    <h2>⚙️ API Settings</h2>
+  <div class="modal-box" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+    <h2>⚙️ Guardrails &amp; Security Settings</h2>
+    
+    <div style="font-size:13px;font-weight:600;color:var(--accent-indigo);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.04em;">Policy &amp; Risk Thresholds</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Warn Threshold (1-100)</label>
+        <input type="number" class="form-input" id="settings-warn-threshold" min="1" max="100" value="30">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Block Threshold (1-100)</label>
+        <input type="number" class="form-input" id="settings-block-threshold" min="1" max="100" value="70">
+      </div>
+    </div>
+
     <div class="form-group">
-      <label class="form-label">LLM Provider (for optional prompt enhancement)</label>
+      <label class="form-label">Active Detection Rules</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-top:6px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="settings-rule-pii" checked> PII (Email, Phone, PAN, Aadhaar)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="settings-rule-secret" checked> Secrets &amp; Credentials
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="settings-rule-injection" checked> Prompt Injection
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="settings-auto-redact">
+        <span>Automatically redact sensitive data on submit</span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Restricted Websites (Comma-separated hosts)</label>
+      <input type="text" class="form-input" id="settings-restricted-sites" placeholder="e.g. untrusted-ai.com, internal-restricted.org">
+    </div>
+
+    <div style="font-size:13px;font-weight:600;color:var(--accent-emerald);margin:18px 0 12px 0;text-transform:uppercase;letter-spacing:0.04em;">LLM Provider (Prompt Enhancement)</div>
+    <div class="form-group">
+      <label class="form-label">Provider</label>
       <select class="form-select" id="settings-provider">
-        <option value="">None (Deterministic only)</option>
+        <option value="">None (Deterministic offline only)</option>
         <option value="openai">OpenAI (GPT-4o-mini)</option>
         <option value="anthropic">Anthropic (Claude Haiku)</option>
         <option value="gemini">Google Gemini Flash</option>

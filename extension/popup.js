@@ -625,6 +625,8 @@ function setupQuickOptimizer() {
   const outputDiv = document.getElementById('quick-output');
   const tokenStatDiv = document.getElementById('quick-token-stat');
 
+  if (!scanBtn || !optimizeBtn || !textarea) return;
+
   // ── Scan ──────────────────────────────────────────────────────────────────
   scanBtn.addEventListener('click', async () => {
     const text = textarea.value.trim();

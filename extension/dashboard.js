@@ -202,7 +202,17 @@ const PRESET_XFER_3_DATA = [
 
 async function loadAnalytics() {
   try {
-    const data = await api('/api/analytics');
+    const modEl = document.getElementById('filter-module');
+    const actEl = document.getElementById('filter-action');
+    const daysEl = document.getElementById('filter-days');
+
+    const params = new URLSearchParams();
+    if (modEl && modEl.value) params.append('module', modEl.value);
+    if (actEl && actEl.value) params.append('action', actEl.value);
+    if (daysEl && daysEl.value) params.append('days', daysEl.value);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const data = await api(`/api/analytics${qs}`);
 
     // KPI ribbon
     const total = (data.total_scans || 0) + (data.total_optimizations || 0) + (data.total_transfers || 0);
@@ -691,9 +701,8 @@ function setupSettings() {
   const providerSelect = document.getElementById('settings-provider');
   const ollamaGroup = document.getElementById('ollama-group');
 
-  // Open modal
-  document.getElementById('btn-settings').addEventListener('click', () => {
-    // Load saved values
+  // Open modal & load backend settings
+  document.getElementById('btn-settings').addEventListener('click', async () => {
     const savedProvider = localStorage.getItem('ca_provider') || '';
     const savedKey = localStorage.getItem('ca_api_key') || '';
     const savedOllamaUrl = localStorage.getItem('ca_ollama_url') || 'http://localhost:11434';
@@ -702,6 +711,25 @@ function setupSettings() {
     document.getElementById('settings-api-key').value = savedKey;
     document.getElementById('settings-ollama-url').value = savedOllamaUrl;
     ollamaGroup.style.display = savedProvider === 'ollama' ? 'block' : 'none';
+
+    try {
+      const s = await api('/api/settings');
+      if (s) {
+        if (s.warn_threshold !== undefined) document.getElementById('settings-warn-threshold').value = s.warn_threshold;
+        if (s.block_threshold !== undefined) document.getElementById('settings-block-threshold').value = s.block_threshold;
+        if (s.auto_redact_on_send !== undefined) document.getElementById('settings-auto-redact').checked = Boolean(s.auto_redact_on_send);
+        if (Array.isArray(s.restricted_websites)) {
+          document.getElementById('settings-restricted-sites').value = s.restricted_websites.join(', ');
+        }
+        if (Array.isArray(s.enabled_rules)) {
+          document.getElementById('settings-rule-pii').checked = s.enabled_rules.includes('PII');
+          document.getElementById('settings-rule-secret').checked = s.enabled_rules.includes('SECRET');
+          document.getElementById('settings-rule-injection').checked = s.enabled_rules.includes('PROMPT_INJECTION');
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch backend settings:', e.message);
+    }
 
     modal.classList.add('open');
   });
@@ -717,10 +745,34 @@ function setupSettings() {
   });
 
   // Save settings
-  document.getElementById('btn-settings-save').addEventListener('click', () => {
+  document.getElementById('btn-settings-save').addEventListener('click', async () => {
     localStorage.setItem('ca_provider', providerSelect.value);
     localStorage.setItem('ca_api_key', document.getElementById('settings-api-key').value);
     localStorage.setItem('ca_ollama_url', document.getElementById('settings-ollama-url').value);
+
+    const warnVal = parseInt(document.getElementById('settings-warn-threshold').value, 10) || 30;
+    const blockVal = parseInt(document.getElementById('settings-block-threshold').value, 10) || 70;
+    const autoRedact = document.getElementById('settings-auto-redact').checked;
+    const sitesRaw = document.getElementById('settings-restricted-sites').value;
+    const sites = sitesRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    const rules = [];
+    if (document.getElementById('settings-rule-pii').checked) rules.push('PII');
+    if (document.getElementById('settings-rule-secret').checked) rules.push('SECRET');
+    if (document.getElementById('settings-rule-injection').checked) rules.push('PROMPT_INJECTION');
+
+    try {
+      await api('/api/settings', 'POST', {
+        warn_threshold: warnVal,
+        block_threshold: blockVal,
+        enabled_rules: rules,
+        restricted_websites: sites,
+        auto_redact_on_send: autoRedact
+      });
+    } catch (err) {
+      console.warn('Could not save settings to backend:', err.message);
+    }
+
     modal.classList.remove('open');
   });
 
@@ -731,12 +783,16 @@ function setupSettings() {
 }
 
 // ─────────────────────────────────────────────
-// AUDIT REFRESH BUTTON
+// AUDIT REFRESH & FILTERS
 // ─────────────────────────────────────────────
 
 function setupAuditRefresh() {
   document.getElementById('btn-refresh-audit').addEventListener('click', () => {
     loadAnalytics();
+  });
+  ['filter-module', 'filter-action', 'filter-days'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => loadAnalytics());
   });
 }
 
