@@ -148,54 +148,68 @@
     }
 
     /* Top Nav / Status Bar */
-    .top-bar {
+    .top-header-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     }
 
-    /* Nav Pills for Studio Switching */
-    .view-nav-pills {
+    .brand-pill {
       display: inline-flex;
-      background: rgba(0, 0, 0, 0.32);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 4px 10px;
       border-radius: 99px;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Segmented Studio Nav Bar */
+    .studio-segmented-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
       padding: 3px;
       gap: 2px;
+      margin-bottom: 14px;
       backdrop-filter: blur(14px);
-      max-width: 280px;
-      overflow-x: auto;
-      scrollbar-width: none;
     }
-    .view-nav-pills::-webkit-scrollbar { display: none; }
 
     .nav-pill {
       border: none;
       background: transparent;
       color: rgba(255, 255, 255, 0.72);
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
-      padding: 5px 9px;
-      border-radius: 99px;
+      padding: 6px 4px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      gap: 3px;
       white-space: nowrap;
     }
 
     .nav-pill:hover {
       color: #ffffff;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
     }
 
     .nav-pill.active {
-      background: rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.22);
       color: #ffffff;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.35);
     }
 
     .status-badge-mini {
@@ -830,29 +844,11 @@
   </div>
 
   <div class="popup-viewport">
-    <!-- Top Bar with Multi-Studio Nav Pills, Status Badge & Close Button -->
-    <div class="top-bar">
-      <div class="view-nav-pills">
-        <button class="nav-pill active" id="tab-overview" title="Showcase Overview">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          Overview
-        </button>
-        <button class="nav-pill" id="tab-guardrails" title="PII & Secret Guardrails">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Guardrails
-        </button>
-        <button class="nav-pill" id="tab-compression" title="AST Token Compression">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          Compress
-        </button>
-        <button class="nav-pill" id="tab-transfer" title="Context Transfer Bridge">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Bridge
-        </button>
-        <button class="nav-pill" id="tab-analytics" title="Live Telemetry Analytics">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Analytics
-        </button>
+    <!-- Top Header Row with Brand & Status -->
+    <div class="top-header-row">
+      <div class="brand-pill">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>ContextArmor AI</span>
       </div>
 
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -865,6 +861,30 @@
           <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
         </button>
       </div>
+    </div>
+
+    <!-- Full-Width Studio Segmented Navigation Bar -->
+    <div class="studio-segmented-bar">
+      <button class="nav-pill active" id="tab-overview" title="Showcase Overview">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span>Overview</span>
+      </button>
+      <button class="nav-pill" id="tab-guardrails" title="PII & Secret Guardrails">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Shield</span>
+      </button>
+      <button class="nav-pill" id="tab-compression" title="AST Token Compression">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>Compress</span>
+      </button>
+      <button class="nav-pill" id="tab-transfer" title="Context Transfer Bridge">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Bridge</span>
+      </button>
+      <button class="nav-pill" id="tab-analytics" title="Live Telemetry Analytics">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics</span>
+      </button>
     </div>
 
     <!-- =====================================================================
