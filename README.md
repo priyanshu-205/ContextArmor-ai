@@ -125,51 +125,7 @@ The widespread adoption of generative AI interfaces has introduced critical secu
 
 ## 🔄 How It Works
 
-```
-User Types in ChatGPT / Claude / Gemini
-                   │
-                   ▼
-┌───────────────────────────────────────────────────────────────┐
-│               Chrome Content Script (content.js)               │
-│  1. Attaches Capture-Phase Listeners (keydown & click)        │
-│  2. Debounced Typing Scan (Live HUD status update)            │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-            User Presses Enter or Clicks Send
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│              Pre-Submission Interception Gate                 │
-│  • Check Website Restriction Policy                           │
-│  • Client-Side Fast Scan (Regex / Luhn / Pattern heuristics)  │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-       [Action: BLOCK]                   [Action: WARN]
-   Halt submit immediately            Halt submit immediately
-   Display Block Modal                Display Warning Modal
-   Dispatch event to SQLite           User picks: "Redact & Send"
-                                      or "Proceed Anyway"
-              │                                 │
-              └────────────────┬────────────────┘
-                               │
-                    [Action: ALLOW / SAFE]
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│              FastAPI Backend (http://127.0.0.1:8000)          │
-│  • Engine Evaluation (/api/scan, /api/optimize, /api/transfer)│
-│  • Persist Event Record in SQLite (events table)              │
-│  • Return Sanitized Payload & Token Metrics                   │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-                               ▼
-┌───────────────────────────────────────────────────────────────┐
-│                     Extension Dashboard                       │
-│  • Updates KPIs, Severity Charts, and Audit Log in Real Time  │
-└───────────────────────────────────────────────────────────────┘
-```
+<img width="1224" height="1285" alt="image" src="https://github.com/user-attachments/assets/be2ff2bf-967e-46a3-9554-d8e85e615de0" />
 
 ---
 
