@@ -6,6 +6,7 @@ All data is stored in backend/contextarmor.db (relative to this file).
 
 import json
 import sqlite3
+import contextlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,10 +17,14 @@ DB_PATH = Path(__file__).parent / "contextarmor.db"
 # Connection helper
 # ---------------------------------------------------------------------------
 
-def _connect() -> sqlite3.Connection:
+@contextlib.contextmanager
+def _connect():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +32,7 @@ def _connect() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 def init_db() -> None:
-    """Create the events table if it does not already exist."""
+    """Create the events and settings tables if they do not already exist."""
     with _connect() as conn:
         conn.execute(
             """
@@ -42,6 +47,14 @@ def init_db() -> None:
                 original_tokens   INTEGER NOT NULL DEFAULT 0,
                 compressed_tokens INTEGER NOT NULL DEFAULT 0,
                 details           TEXT NOT NULL         -- JSON object
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )
             """
         )
@@ -92,56 +105,114 @@ def log_event(
 
 
 # ---------------------------------------------------------------------------
+# Settings persistence
+# ---------------------------------------------------------------------------
+
+DEFAULT_SETTINGS = {
+    "warn_threshold": 20.0,
+    "block_threshold": 60.0,
+    "pii_action": "WARN",
+    "secrets_action": "BLOCK",
+    "injection_action": "BLOCK",
+    "auto_intercept": True,
+    "rules_config": {
+        "EMAIL": True,
+        "PHONE": True,
+        "IPV4": True,
+        "CREDIT_CARD": True,
+        "PAN_CARD": True,
+        "GOVT_ID": True,
+        "OPENAI_KEY": True,
+        "ANTHROPIC_KEY": True,
+        "AWS_KEY": True,
+        "GITHUB_TOKEN": True,
+        "SLACK_TOKEN": True,
+        "GOOGLE_API_KEY": True,
+        "PRIVATE_KEY": True,
+        "JWT_TOKEN": True,
+        "BEARER_TOKEN": True,
+        "DATABASE_URL": True,
+        "HIGH_ENTROPY_SECRET": True,
+        "PROMPT_INJECTION": True,
+    },
+    "restricted_websites": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+    ],
+}
+
+
+def get_settings() -> dict:
+    """Return active settings merged with defaults."""
+    with _connect() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'app_config'").fetchone()
+        if not row:
+            return dict(DEFAULT_SETTINGS)
+        try:
+            saved = json.loads(row[0])
+            merged = dict(DEFAULT_SETTINGS)
+            merged.update(saved)
+            return merged
+        except Exception:
+            return dict(DEFAULT_SETTINGS)
+
+
+def save_settings(new_settings: dict) -> dict:
+    """Persist updated settings and return the updated config."""
+    current = get_settings()
+    current.update(new_settings)
+    val_json = json.dumps(current)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO settings (key, value) VALUES ('app_config', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (val_json,),
+        )
+        conn.commit()
+    return current
+
+
+# ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
 
-def get_analytics() -> dict:
+def get_analytics(module: str = None, action: str = None, days: int = None) -> dict:
     """
-    Return a summary dict consumed by the dashboard:
+    Return an aggregated summary dict consumed by the dashboard,
+    with support for filtering by module, action, and date range.
+    """
+    from datetime import timedelta
 
-    {
-        total_scans:        int,
-        total_optimizations:int,
-        total_transfers:    int,
-        threats_blocked:    int,
-        pii_redacted_count: int,   # total entity items across all rows
-        total_tokens_saved: int,
-        average_risk_score: float,
-        category_breakdown: {entity_type: count, ...},
-        recent_events:      [dict, ...],   # last 25, newest first
-    }
-    """
     with _connect() as conn:
-        # --- simple aggregates ------------------------------------------
         def _scalar(sql, params=()):
             row = conn.execute(sql, params).fetchone()
             return row[0] if row else 0
 
-        total_scans = _scalar(
-            "SELECT COUNT(*) FROM events WHERE module = 'SCAN'"
-        )
-        total_optimizations = _scalar(
-            "SELECT COUNT(*) FROM events WHERE module = 'OPTIMIZE'"
-        )
-        total_transfers = _scalar(
-            "SELECT COUNT(*) FROM events WHERE module = 'TRANSFER'"
-        )
-        threats_blocked = _scalar(
-            "SELECT COUNT(*) FROM events WHERE action = 'BLOCK'"
-        )
-        total_tokens_saved = _scalar(
-            "SELECT COALESCE(SUM(tokens_saved), 0) FROM events"
-        )
-        avg_risk = _scalar(
-            "SELECT COALESCE(AVG(risk_score), 0.0) FROM events"
-        )
+        # Base aggregates
+        total_scans = _scalar("SELECT COUNT(*) FROM events WHERE module = 'SCAN'")
+        total_optimizations = _scalar("SELECT COUNT(*) FROM events WHERE module = 'OPTIMIZE'")
+        total_transfers = _scalar("SELECT COUNT(*) FROM events WHERE module = 'TRANSFER'")
+        threats_blocked = _scalar("SELECT COUNT(*) FROM events WHERE action = 'BLOCK'")
+        total_tokens_saved = _scalar("SELECT COALESCE(SUM(tokens_saved), 0) FROM events")
+        avg_risk = _scalar("SELECT COALESCE(AVG(risk_score), 0.0) FROM events")
 
-        # --- pii_redacted_count & category_breakdown --------------------
-        # We must iterate over every row's detected_entities JSON array.
-        all_entities_rows = conn.execute(
-            "SELECT detected_entities FROM events"
-        ).fetchall()
+        # Severity breakdown
+        sev_critical = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 60")
+        sev_high = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 30 AND risk_score < 60")
+        sev_medium = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 15 AND risk_score < 30")
+        sev_low = _scalar("SELECT COUNT(*) FROM events WHERE risk_score < 15")
+        severity_distribution = {
+            "CRITICAL": sev_critical,
+            "HIGH": sev_high,
+            "MEDIUM": sev_medium,
+            "LOW": sev_low,
+        }
 
+        # Category breakdown
+        all_entities_rows = conn.execute("SELECT detected_entities FROM events").fetchall()
         pii_redacted_count = 0
         category_breakdown: dict[str, int] = {}
 
@@ -152,10 +223,7 @@ def get_analytics() -> dict:
                 entities = []
 
             pii_redacted_count += len(entities)
-
             for entity in entities:
-                # Each entity may be a plain string (the type name) or a dict
-                # with a "type" key depending on which caller produced it.
                 if isinstance(entity, dict):
                     key = entity.get("type", "UNKNOWN")
                 elif isinstance(entity, str):
@@ -164,17 +232,31 @@ def get_analytics() -> dict:
                     key = "UNKNOWN"
                 category_breakdown[key] = category_breakdown.get(key, 0) + 1
 
-        # --- recent events (last 25, newest first) ----------------------
-        raw_rows = conn.execute(
-            """
+        # Filtered recent events
+        where_clauses = []
+        params = []
+        if module:
+            where_clauses.append("module = ?")
+            params.append(module.upper())
+        if action:
+            where_clauses.append("action = ?")
+            params.append(action.upper())
+        if days and days > 0:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            where_clauses.append("timestamp >= ?")
+            params.append(cutoff)
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        query = f"""
             SELECT id, timestamp, module, risk_score, action,
                    detected_entities, tokens_saved, original_tokens,
                    compressed_tokens, details
             FROM events
+            {where_sql}
             ORDER BY id DESC
-            LIMIT 25
-            """
-        ).fetchall()
+            LIMIT 50
+        """
+        raw_rows = conn.execute(query, params).fetchall()
 
         recent_events = []
         for r in raw_rows:
@@ -201,6 +283,7 @@ def get_analytics() -> dict:
         "pii_redacted_count": pii_redacted_count,
         "total_tokens_saved": total_tokens_saved,
         "average_risk_score": round(float(avg_risk), 2),
+        "severity_distribution": severity_distribution,
         "category_breakdown": category_breakdown,
         "recent_events": recent_events,
     }
