@@ -2,7 +2,6 @@
 // Injects floating guardrails HUD into ChatGPT, Claude, and Gemini
 'use strict';
 
-const API_BASE = 'http://127.0.0.1:8000';
 let hudInjected = false;
 let currentInput = null;
 let scanDebounceTimer = null;
@@ -217,20 +216,12 @@ function getElementDomIndex(el) {
 // ─── Backend Status Check ─────────────────────────────────────────────────────
 
 async function checkBackendStatus() {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 2000);
   try {
-    const response = await fetch(`${API_BASE}/`, {
-      signal: controller.signal,
-      method: 'GET',
-      cache: 'no-store'
-    });
-    clearTimeout(timeoutId);
-    isBackendOnline = response.ok;
+    const response = await sendToBackground({ action: 'check_backend' });
+    isBackendOnline = Boolean(response && response.online);
   } catch (_) {
     isBackendOnline = false;
   }
-  clearTimeout(timeoutId);
   return isBackendOnline;
 }
 
@@ -661,7 +652,7 @@ function injectHud() {
         showToast('Redaction returned no result', 'warning');
       }
     } catch (err) {
-      showToast('Redaction failed — backend offline?', 'warning');
+      showToast(`Redaction failed: ${err.message}`, 'warning');
     } finally {
       redactBtn.classList.remove('loading');
       redactBtn.textContent = '🛡️ Auto-Redact PII';
@@ -708,7 +699,7 @@ function injectHud() {
         showToast('Optimization returned no result', 'warning');
       }
     } catch (err) {
-      showToast('Optimization failed — backend offline?', 'warning');
+      showToast(`Optimization failed: ${err.message}`, 'warning');
     } finally {
       optimizeBtn.classList.remove('loading');
       optimizeBtn.textContent = '✨ Optimize & Compress';
@@ -741,7 +732,7 @@ function injectHud() {
         showToast('Transfer returned no bridge prompt', 'warning');
       }
     } catch (err) {
-      showToast('Transfer failed — backend offline?', 'warning');
+      showToast(`Transfer failed: ${err.message}`, 'warning');
     } finally {
       transferBtn.classList.remove('loading');
       transferBtn.textContent = '📦 Transfer Chat';

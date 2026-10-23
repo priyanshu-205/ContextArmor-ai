@@ -1,5 +1,5 @@
 // ContextArmor AI - Background Service Worker
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASES = ['http://127.0.0.1:8000', 'http://localhost:8000'];
 
 // ---------------------------------------------------------------------------
 // 1. API helper
@@ -15,10 +15,25 @@ async function callAPI(endpoint, method = 'GET', data = null) {
   }
 
   let response;
-  try {
-    response = await fetch(API_BASE + endpoint, options);
-  } catch (networkErr) {
-    throw new Error('Backend offline');
+  let lastError;
+  for (const base of API_BASES) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      response = await fetch(base + endpoint, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      break;
+    } catch (networkErr) {
+      clearTimeout(timeoutId);
+      lastError = networkErr;
+    }
+  }
+
+  if (!response) {
+    const reason = lastError && lastError.name === 'AbortError'
+      ? 'the request timed out'
+      : 'connection was refused or the extension lacks local API access';
+    throw new Error(`Cannot reach ContextArmor at 127.0.0.1:8000 (${reason}). Confirm the backend is listening on port 8000 and reload the extension after granting local network access.`);
   }
 
   if (!response.ok) {

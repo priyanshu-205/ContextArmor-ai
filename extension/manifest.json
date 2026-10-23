@@ -16,6 +16,7 @@
     "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
+    "http://localhost:8000/*",
     "http://127.0.0.1:8000/*"
   ],
   "background": {
