@@ -456,13 +456,14 @@ def test_chat_transfer():
     primary_objective = result.get("primary_objective", "")
     bridge_prompt = result.get("bridge_prompt", "")
 
-    # For short conversations the bridge may be similar length to original.
-    # Accept ratio > 0.5 (bridge is at most 2x original) OR significant tokens saved.
-    ratio_ok = compression_ratio > 0.5
+    # A useful bridge can be longer than a short transcript because it adds
+    # explicit structure. Validate truthful metrics and retained continuation details.
+    ratio_ok = compression_ratio > 0
     objective_ok = bool(primary_objective.strip())
     bridge_ok = "FastAPI" in bridge_prompt or "task" in bridge_prompt.lower()
+    context_ok = "JWT" in bridge_prompt and "DELETE" in bridge_prompt and "Recent Conversation Context" in bridge_prompt
 
-    ok = ratio_ok and objective_ok and bridge_ok
+    ok = ratio_ok and objective_ok and bridge_ok and context_ok
 
     if ok:
         bridge_preview = bridge_prompt[:200].replace("\n", " ")
@@ -476,14 +477,14 @@ def test_chat_transfer():
         print(
             f"❌ FAIL: Chat transfer — "
             f"ratio={compression_ratio:.2f}x, "
-            f"objective_ok={objective_ok}, bridge_ok={bridge_ok}"
+            f"objective_ok={objective_ok}, bridge_ok={bridge_ok}, context_ok={context_ok}"
         )
         print(f"         primary_objective: {primary_objective!r}")
         print(f"         bridge_prompt preview: {bridge_prompt[:300]!r}")
 
     assert ok, (
         f"Chat transfer failed: ratio={compression_ratio:.2f}, "
-        f"objective_ok={objective_ok}, bridge_ok={bridge_ok}"
+        f"objective_ok={objective_ok}, bridge_ok={bridge_ok}, context_ok={context_ok}"
     )
 
 

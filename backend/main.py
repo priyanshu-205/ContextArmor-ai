@@ -5,8 +5,8 @@ Production-grade security guardrails, prompt optimization, and chat transfer API
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Optional, List, Literal
 import uvicorn
 import json
 from datetime import datetime
@@ -50,24 +50,24 @@ async def on_startup() -> None:
 # ---------------------------------------------------------------------------
 
 class ScanRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=200_000)
 
 
 class OptimizeRequest(BaseModel):
-    text: str
-    mode: str = "lossless"  # "lossless" or "signatures"
+    text: str = Field(min_length=1, max_length=200_000)
+    mode: Literal["lossless", "signatures"] = "lossless"
     api_key: Optional[str] = None
     provider: Optional[str] = None  # "openai", "anthropic", "gemini", "ollama"
 
 
 class Message(BaseModel):
-    role: str  # "user" or "assistant"
-    content: str
+    role: Literal["user", "assistant", "system", "developer"]
+    content: str = Field(min_length=1, max_length=50_000)
 
 
 class TransferRequest(BaseModel):
-    messages: Optional[List[Message]] = None
-    raw_transcript: Optional[str] = None
+    messages: Optional[List[Message]] = Field(default=None, max_length=500)
+    raw_transcript: Optional[str] = Field(default=None, max_length=200_000)
 
 
 # ---------------------------------------------------------------------------

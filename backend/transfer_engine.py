@@ -77,6 +77,8 @@ class TransferEngine:
         key_decisions = self._extract_key_decisions(sanitized_messages)
         latest_code = self._extract_latest_code(sanitized_messages)
         pending_tasks = self._extract_pending_tasks(sanitized_messages)
+        requirements = self._extract_requirements(sanitized_messages)
+        recent_context = self._extract_recent_context(sanitized_messages)
 
         # ------------------------------------------------------------------
         # Step 5 — Generate bridge prompt
@@ -111,6 +113,10 @@ class TransferEngine:
 
         bridge_prompt = (
             "# 🔄 Continuation Bridge — ContextArmor Transfer\n\n"
+            "## Requirements & User Priorities\n"
+            f"{requirements or 'No additional requirements identified'}\n\n"
+            "## Recent Conversation Context\n"
+            f"{recent_context or 'No recent context available'}\n\n"
             "## 🎯 Primary Objective\n"
             f"{primary_objective}\n\n"
             "## 🛠 Tech Stack & Constraints\n"
@@ -171,7 +177,10 @@ class TransferEngine:
             for item in messages:
                 if isinstance(item, dict):
                     role = str(item.get("role", "user")).strip().lower()
-                    content = str(item.get("content", "")).strip()
+                    if role not in {"user", "assistant", "system", "developer"}:
+                        role = "user"
+                    raw_content = item.get("content", "")
+                    content = raw_content.strip() if isinstance(raw_content, str) else str(raw_content).strip()
                     normalized.append({"role": role, "content": content})
             if normalized:
                 return normalized
@@ -269,7 +278,34 @@ class TransferEngine:
                 pivot_summary = _first_sentences(user_messages[1]["content"], 2)
                 pivot_text = f" Later pivoted to: {pivot_summary}"
 
+        latest_summary = _first_sentences(user_messages[-1]["content"], 2)
+        if len(user_messages) > 1 and latest_summary.lower() not in first_summary.lower():
+            pivot_text = f" Latest user request: {latest_summary}"
         return (first_summary + pivot_text).strip()
+
+    def _extract_requirements(self, messages: list) -> str:
+        """Extract concrete constraints and requirements from user turns."""
+        text = "\n".join(m["content"] for m in messages if m["role"] == "user")
+        pattern = re.compile(r"[^.!?\n]*(?:must|should|need to|needs to|require(?:ment|s)?|do not|don't|cannot|without|at least|no more than)[^.!?\n]*[.!?]?", re.IGNORECASE)
+        found, seen = [], set()
+        for match in pattern.finditer(text):
+            item = re.sub(r"\s+", " ", match.group(0)).strip(" -\t")
+            if len(item) > 12 and item.casefold() not in seen:
+                seen.add(item.casefold())
+                found.append(item)
+        return "\n".join(f"- {item}" for item in found[-10:])
+
+    def _extract_recent_context(self, messages: list) -> str:
+        """Keep recent conversational details with a per-turn size bound."""
+        lines = []
+        for message in messages[-4:]:
+            content = re.sub(r"```.*?```", "[code excerpt captured above]", message["content"], flags=re.DOTALL)
+            content = re.sub(r"\s+", " ", content).strip()
+            if len(content) > 220:
+                content = content[:217].rsplit(" ", 1)[0] + "..."
+            if content:
+                lines.append(f"- {message['role'].title()}: {content}")
+        return "\n".join(lines)
 
     def _extract_tech_stack(self, messages: list) -> list:
         """
@@ -362,21 +398,15 @@ class TransferEngine:
         code_block_pattern = re.compile(r'```(\w*)\n(.*?)```', re.DOTALL)
 
         # Search messages in reverse to find the last one with code
-        last_code_message = None
-        for msg in reversed(messages):
-            if code_block_pattern.search(msg["content"]):
-                last_code_message = msg
-                break
-
-        if last_code_message is None:
-            return ""
-
-        code_blocks = code_block_pattern.findall(last_code_message["content"])
-        if not code_blocks:
+        latest_by_language = {}
+        for msg in messages:
+            for language, code_body in code_block_pattern.findall(msg["content"]):
+                latest_by_language[language.strip().lower() or "text"] = (language, code_body)
+        if not latest_by_language:
             return ""
 
         compressed_parts: list[str] = []
-        for language, code_body in code_blocks:
+        for language, code_body in latest_by_language.values():
             lang = language.strip().lower()
             try:
                 compressed = self._compressor._compress_code(code_body, lang, "signatures")
@@ -391,7 +421,7 @@ class TransferEngine:
         Scan the last 4 messages for unresolved tasks and issues.
         Return up to 5 relevant sentences.
         """
-        recent_messages = messages[-4:] if len(messages) >= 4 else messages
+        recent_messages = [m for m in messages[-8:] if m["role"] == "user"]
         combined_text = " ".join(m["content"] for m in recent_messages)
 
         pending_pattern = re.compile(
