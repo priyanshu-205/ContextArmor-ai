@@ -292,7 +292,7 @@ function getElementDomIndex(el) {
 async function checkBackendStatus() {
   try {
     const response = await sendToBackground({ action: 'check_backend' });
-    isBackendOnline = Boolean(response && response.online);
+    isBackendOnline = Boolean(response && (response.online || response.success));
   } catch (_) {
     isBackendOnline = false;
   }
@@ -1104,6 +1104,16 @@ function interceptSubmission(event, inputEl) {
   const latency = performance.now() - startTime;
   window.__ca_interception_latency = latency;
 
+  // Persist telemetry event to backend database (scan / block / warn / allow)
+  sendToBackground({
+    action: 'scan',
+    text,
+    log_event: true,
+    warn_threshold: policySettings.warn_threshold,
+    block_threshold: policySettings.block_threshold,
+    enabled_rules: policySettings.enabled_rules,
+  }).catch(() => {});
+
   if (policySettings.auto_redact_on_send && scanResult.hasPII && scanResult.action !== 'BLOCK') {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -1240,10 +1250,10 @@ function handleInput(event) {
     const clientLabel = labelParts.length > 0 ? labelParts.join(', ') : 'Clean';
     updateHudStatus(clientResult.action, clientLabel);
 
-    // Background API scan if backend is available
+    // Background API scan if backend is available (preview only, avoid duplicate event logging while typing)
     if (isBackendOnline) {
       try {
-        const result = await sendToBackground({ action: 'scan', text });
+        const result = await sendToBackground({ action: 'scan', text, log_event: false });
         if (requestId !== liveScanSequence) return;
         if (result && result.risk_action) {
           const apiLabel = result.risk_label || result.risk_action;

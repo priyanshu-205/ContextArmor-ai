@@ -117,18 +117,30 @@ async function checkBackendStatus() {
   const badge = document.getElementById('backend-status');
   const statusText = document.getElementById('status-text');
 
-  // Optimistic "checking" state is already set by the HTML.
-  const result = await sendToBackground('check_backend');
+  if (badge) badge.classList.remove('status-online', 'status-offline');
+  if (statusText) statusText.textContent = 'Checking...';
 
-  // Clear both classes and apply the correct one.
-  badge.classList.remove('status-online', 'status-offline');
+  try {
+    const result = await sendToBackground('check_backend');
 
-  if (result && result.success) {
-    badge.classList.add('status-online');
-    statusText.textContent = ':8000 Online';
-  } else {
-    badge.classList.add('status-offline');
-    statusText.textContent = 'Offline';
+    if (badge) badge.classList.remove('status-online', 'status-offline');
+
+    if (result && (result.online || result.success)) {
+      if (badge) badge.classList.add('status-online');
+      if (statusText) statusText.textContent = ':8000 Online';
+      return true;
+    } else {
+      if (badge) badge.classList.add('status-offline');
+      if (statusText) statusText.textContent = 'Offline';
+      return false;
+    }
+  } catch (_) {
+    if (badge) {
+      badge.classList.remove('status-online', 'status-offline');
+      badge.classList.add('status-offline');
+    }
+    if (statusText) statusText.textContent = 'Offline';
+    return false;
   }
 }
 
@@ -180,28 +192,33 @@ function animateCounter(element, target, isDecimal = false, duration = 650) {
  * Load analytics from the background worker and populate the KPI cards.
  */
 async function loadAnalytics() {
-  const result = await sendToBackground('analytics');
+  try {
+    const result = await sendToBackground('analytics');
 
-  if (!result || !result.success) return;
+    if (!result || (result.success === false && !result.result && !result.data)) return;
 
-  const data = result.data || result; // support both wrapped and flat responses
+    // Unpack data whether wrapped in result.result, result.data, or flat
+    const data = result.result || result.data || result;
 
-  const totalScans =
-    (Number(data.total_scans) || 0) +
-    (Number(data.total_optimizations) || 0) +
-    (Number(data.total_transfers) || 0);
+    const totalScans =
+      (Number(data.total_scans) || 0) +
+      (Number(data.total_optimizations) || 0) +
+      (Number(data.total_transfers) || 0);
 
-  const scansEl = document.getElementById('kpi-scans');
-  const blockedEl = document.getElementById('kpi-blocked');
-  const tokensEl = document.getElementById('kpi-tokens');
-  const riskEl = document.getElementById('kpi-risk');
+    const scansEl = document.getElementById('kpi-scans');
+    const blockedEl = document.getElementById('kpi-blocked');
+    const tokensEl = document.getElementById('kpi-tokens');
+    const riskEl = document.getElementById('kpi-risk');
 
-  if (scansEl) animateCounter(scansEl, totalScans, false);
-  if (blockedEl) animateCounter(blockedEl, Number(data.threats_blocked) || 0, false);
-  if (tokensEl) animateCounter(tokensEl, Number(data.total_tokens_saved) || 0, false);
-  if (riskEl) {
-    const avg = data.average_risk_score != null ? Number(data.average_risk_score) : 0;
-    animateCounter(riskEl, avg, true);
+    if (scansEl) animateCounter(scansEl, totalScans, false);
+    if (blockedEl) animateCounter(blockedEl, Number(data.threats_blocked) || 0, false);
+    if (tokensEl) animateCounter(tokensEl, Number(data.total_tokens_saved) || 0, false);
+    if (riskEl) {
+      const avg = data.average_risk_score != null ? Number(data.average_risk_score) : 0;
+      animateCounter(riskEl, avg, true);
+    }
+  } catch (err) {
+    console.warn('[ContextArmor] popup loadAnalytics error:', err);
   }
 }
 

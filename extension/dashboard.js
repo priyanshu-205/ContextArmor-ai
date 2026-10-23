@@ -1,7 +1,8 @@
 // ContextArmor AI - Dashboard Controller
 'use strict';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASES = ['http://127.0.0.1:8000', 'http://localhost:8000'];
+let activeApiBase = 'http://127.0.0.1:8000';
 let currentBridgePrompt = '';
 let currentSanitizedText = '';
 let selectedMode = 'lossless';
@@ -11,30 +12,90 @@ let selectedMode = 'lossless';
 // ─────────────────────────────────────────────
 
 /**
- * Async fetch wrapper with 15-second timeout.
+ * Async fetch wrapper with multi-host fallback and background worker proxy.
  * Returns parsed JSON or throws on error.
  */
 async function api(endpoint, method = 'GET', body = null) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  try {
-    const opts = {
-      method,
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-    };
-    if (body !== null) {
-      opts.body = JSON.stringify(body);
+  const bases = [activeApiBase, ...API_BASES.filter(b => b !== activeApiBase)];
+  let lastErr = null;
+
+  for (const base of bases) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const opts = {
+        method,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      if (body !== null) {
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(`${base}${endpoint}`, opts);
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw new Error(`API ${res.status}: ${errText}`);
+      }
+      activeApiBase = base;
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastErr = err;
     }
-    const res = await fetch(`${API_BASE}${endpoint}`, opts);
-    if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`API ${res.status}: ${errText}`);
-    }
-    return await res.json();
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  // Fallback to extension background service worker if running inside Chrome extension
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      const bgRes = await new Promise((resolve) => {
+        let action = null;
+        let data = {};
+        if (endpoint.startsWith('/api/analytics')) {
+          action = 'analytics';
+          const urlObj = new URL(endpoint, 'http://dummy');
+          if (urlObj.searchParams.get('module')) data.module = urlObj.searchParams.get('module');
+          if (urlObj.searchParams.get('action')) data.action_filter = urlObj.searchParams.get('action');
+          if (urlObj.searchParams.get('days')) data.days = urlObj.searchParams.get('days');
+        } else if (endpoint === '/api/settings') {
+          action = method === 'POST' ? 'save_settings' : 'get_settings';
+          if (method === 'POST') data = { settings: body };
+        } else if (endpoint === '/api/reset-demo') {
+          action = 'reset_demo';
+        } else if (endpoint === '/api/scan') {
+          action = 'scan';
+          data = body || {};
+        } else if (endpoint === '/api/optimize') {
+          action = 'optimize';
+          data = body || {};
+        } else if (endpoint === '/api/transfer') {
+          action = 'transfer';
+          data = body || {};
+        }
+
+        if (action) {
+          chrome.runtime.sendMessage({ action, ...data }, (response) => {
+            if (chrome.runtime.lastError || !response) {
+              resolve(null);
+            } else {
+              resolve(response);
+            }
+          });
+        } else {
+          resolve(null);
+        }
+      });
+
+      if (bgRes) {
+        if (bgRes.success && bgRes.result !== undefined) {
+          return bgRes.result;
+        }
+        if (bgRes.success) return bgRes;
+      }
+    } catch (_) {}
+  }
+
+  throw lastErr || new Error('Cannot reach ContextArmor backend at 127.0.0.1:8000 or localhost:8000');
 }
 
 /**
@@ -223,7 +284,14 @@ async function loadAnalytics() {
     document.getElementById('k-risk').textContent =
       data.average_risk_score !== null && data.average_risk_score !== undefined
         ? Number(data.average_risk_score).toFixed(1)
-        : '—';
+        : '0.0';
+
+    // Update status badge to online since analytics call succeeded
+    const badge = document.getElementById('db-status-badge');
+    if (badge && !badge.textContent.includes('Online')) {
+      badge.className = 'pill pill-green';
+      badge.textContent = '● API Online :8000';
+    }
 
     // Charts & log
     renderDonutChart(data.category_breakdown || {});
@@ -231,10 +299,16 @@ async function loadAnalytics() {
     renderAuditLog(data.recent_events || []);
   } catch (err) {
     console.warn('[ContextArmor] loadAnalytics error:', err.message);
-    // Show placeholder zeros rather than crashing
+    // Mark status offline when request fails
+    const badge = document.getElementById('db-status-badge');
+    if (badge) {
+      badge.className = 'pill pill-red';
+      badge.textContent = '● API Offline';
+    }
+    // Failed API requests show disconnected indicator rather than pretending metrics are 0
     ['k-total','k-tokens','k-pii','k-blocked','k-risk'].forEach(id => {
       const el = document.getElementById(id);
-      if (el && el.textContent === '—') el.textContent = '0';
+      if (el) el.textContent = '—';
     });
     renderDonutChart({});
     renderBarChart([]);
@@ -823,21 +897,53 @@ function setupResetDemo() {
 
 async function checkBackendStatus() {
   const badge = document.getElementById('db-status-badge');
-  try {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${API_BASE}/`, { signal: controller.signal });
-    clearTimeout(tid);
-    if (res.ok) {
-      badge.className = 'pill pill-green';
-      badge.textContent = '● API Online :8000';
-    } else {
-      throw new Error('Non-OK status');
-    }
-  } catch {
-    badge.className = 'pill pill-red';
-    badge.textContent = '● API Offline';
+  if (!badge) return false;
+
+  // Show "Checking..." if currently offline or connecting
+  if (!badge.textContent.includes('Online')) {
+    badge.className = 'pill pill-amber';
+    badge.textContent = '● Checking...';
   }
+
+  const bases = [activeApiBase, ...API_BASES.filter(b => b !== activeApiBase)];
+  for (const base of bases) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${base}/`, { signal: controller.signal });
+      clearTimeout(tid);
+      if (res.ok) {
+        activeApiBase = base;
+        badge.className = 'pill pill-green';
+        badge.textContent = '● API Online :8000';
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Also check background worker if in Chrome extension context
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      const bgOnline = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'check_backend' }, (resp) => {
+          if (!chrome.runtime.lastError && resp && (resp.online || resp.success)) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        });
+      });
+      if (bgOnline) {
+        badge.className = 'pill pill-green';
+        badge.textContent = '● API Online :8000';
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  badge.className = 'pill pill-red';
+  badge.textContent = '● API Offline';
+  return false;
 }
 
 // ─────────────────────────────────────────────
@@ -845,13 +951,21 @@ async function checkBackendStatus() {
 // ─────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
-  checkBackendStatus();
+  const isOnline = await checkBackendStatus();
   await loadAnalytics();
+
   setupTabs();
   setupPresets();
   setupSandbox();
   setupSettings();
   setupAuditRefresh();
   setupResetDemo();
-  setInterval(loadAnalytics, 30000);
+
+  // Periodic health check and auto-recovery loop (every 15s)
+  setInterval(async () => {
+    const online = await checkBackendStatus();
+    if (online) {
+      await loadAnalytics();
+    }
+  }, 15000);
 });

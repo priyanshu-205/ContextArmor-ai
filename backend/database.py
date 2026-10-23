@@ -191,19 +191,39 @@ def get_analytics(module: str = None, action: str = None, days: int = None) -> d
             row = conn.execute(sql, params).fetchone()
             return row[0] if row else 0
 
+        # Construct time filter for aggregates
+        time_clauses = []
+        time_params = []
+        if days and days > 0:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            time_clauses.append("timestamp >= ?")
+            time_params.append(cutoff)
+
+        def _where(extra=""):
+            clauses = list(time_clauses)
+            if extra:
+                clauses.append(extra)
+            return ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
         # Base aggregates
-        total_scans = _scalar("SELECT COUNT(*) FROM events WHERE module = 'SCAN'")
-        total_optimizations = _scalar("SELECT COUNT(*) FROM events WHERE module = 'OPTIMIZE'")
-        total_transfers = _scalar("SELECT COUNT(*) FROM events WHERE module = 'TRANSFER'")
-        threats_blocked = _scalar("SELECT COUNT(*) FROM events WHERE action = 'BLOCK'")
-        total_tokens_saved = _scalar("SELECT COALESCE(SUM(tokens_saved), 0) FROM events")
-        avg_risk = _scalar("SELECT COALESCE(AVG(risk_score), 0.0) FROM events")
+        where_scan = _where("module = 'SCAN'")
+        where_opt = _where("module = 'OPTIMIZE'")
+        where_xfer = _where("module = 'TRANSFER'")
+        where_block = _where("action = 'BLOCK'")
+        where_all = _where()
+
+        total_scans = _scalar(f"SELECT COUNT(*) FROM events {where_scan}", time_params)
+        total_optimizations = _scalar(f"SELECT COUNT(*) FROM events {where_opt}", time_params)
+        total_transfers = _scalar(f"SELECT COUNT(*) FROM events {where_xfer}", time_params)
+        threats_blocked = _scalar(f"SELECT COUNT(*) FROM events {where_block}", time_params)
+        total_tokens_saved = _scalar(f"SELECT COALESCE(SUM(tokens_saved), 0) FROM events {where_all}", time_params)
+        avg_risk = _scalar(f"SELECT COALESCE(AVG(risk_score), 0.0) FROM events {where_all}", time_params)
 
         # Severity breakdown
-        sev_critical = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 60")
-        sev_high = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 30 AND risk_score < 60")
-        sev_medium = _scalar("SELECT COUNT(*) FROM events WHERE risk_score >= 15 AND risk_score < 30")
-        sev_low = _scalar("SELECT COUNT(*) FROM events WHERE risk_score < 15")
+        sev_critical = _scalar(f"SELECT COUNT(*) FROM events {_where('risk_score >= 60')}", time_params)
+        sev_high = _scalar(f"SELECT COUNT(*) FROM events {_where('risk_score >= 30 AND risk_score < 60')}", time_params)
+        sev_medium = _scalar(f"SELECT COUNT(*) FROM events {_where('risk_score >= 15 AND risk_score < 30')}", time_params)
+        sev_low = _scalar(f"SELECT COUNT(*) FROM events {_where('risk_score < 15')}", time_params)
         severity_distribution = {
             "CRITICAL": sev_critical,
             "HIGH": sev_high,
@@ -212,7 +232,9 @@ def get_analytics(module: str = None, action: str = None, days: int = None) -> d
         }
 
         # Category breakdown
-        all_entities_rows = conn.execute("SELECT detected_entities FROM events").fetchall()
+        all_entities_rows = conn.execute(
+            f"SELECT detected_entities FROM events {_where()}", time_params
+        ).fetchall()
         pii_redacted_count = 0
         category_breakdown: dict[str, int] = {}
 
@@ -232,19 +254,15 @@ def get_analytics(module: str = None, action: str = None, days: int = None) -> d
                     key = "UNKNOWN"
                 category_breakdown[key] = category_breakdown.get(key, 0) + 1
 
-        # Filtered recent events
-        where_clauses = []
-        params = []
+        # Filtered recent events (includes module & action filters)
+        where_clauses = list(time_clauses)
+        params = list(time_params)
         if module:
             where_clauses.append("module = ?")
             params.append(module.upper())
         if action:
             where_clauses.append("action = ?")
             params.append(action.upper())
-        if days and days > 0:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-            where_clauses.append("timestamp >= ?")
-            params.append(cutoff)
 
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         query = f"""

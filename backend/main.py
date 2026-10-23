@@ -41,11 +41,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    """Initialize the database and seed demo data if the DB is empty."""
+    """Initialize the database tables if they do not exist."""
     init_db()
-    analytics = get_analytics()
-    if analytics.get("total_scans", 0) == 0:
-        seed_demo_data()
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +54,7 @@ class ScanRequest(BaseModel):
     warn_threshold: Optional[int] = None
     block_threshold: Optional[int] = None
     enabled_rules: Optional[List[str]] = None
+    log_event: Optional[bool] = True
 
 
 class OptimizeRequest(BaseModel):
@@ -107,16 +105,17 @@ async def scan(request: ScanRequest) -> dict:
     )
     result = engine.scan(request.text)
 
-    log_event(
-        module="SCAN",
-        risk_score=result["risk_score"],
-        action=result["action"],
-        detected_entities=[f["type"] for f in result["findings"]],
-        tokens_saved=0,
-        original_tokens=0,
-        compressed_tokens=0,
-        details_dict={"findings_count": len(result["findings"])},
-    )
+    if request.log_event:
+        log_event(
+            module="SCAN",
+            risk_score=result["risk_score"],
+            action=result["action"],
+            detected_entities=[f["type"] for f in result["findings"]],
+            tokens_saved=0,
+            original_tokens=0,
+            compressed_tokens=0,
+            details_dict={"findings_count": len(result["findings"])},
+        )
 
     return result
 

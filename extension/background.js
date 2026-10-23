@@ -80,7 +80,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       switch (msg.action) {
 
         case 'scan': {
-          const result = await callAPI('/api/scan', 'POST', { text: msg.text });
+          const result = await callAPI('/api/scan', 'POST', {
+            text: msg.text,
+            warn_threshold: msg.warn_threshold,
+            block_threshold: msg.block_threshold,
+            enabled_rules: msg.enabled_rules,
+            log_event: msg.log_event !== false,
+          });
           const tabId = sender.tab && sender.tab.id;
           if (tabId !== undefined && tabId !== null) {
             updateBadge(tabId, result.risk_score, result.action);
@@ -150,9 +156,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         case 'check_backend': {
           try {
             await callAPI('/', 'GET');
-            sendResponse({ online: true });
+            sendResponse({ online: true, success: true });
           } catch {
-            sendResponse({ online: false });
+            sendResponse({ online: false, success: false });
           }
           break;
         }
