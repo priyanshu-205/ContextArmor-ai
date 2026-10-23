@@ -391,6 +391,125 @@ function setupTransfer() {
 }
 
 // ---------------------------------------------------------------------------
+// Guardrails & Security Studio Controller
+// ---------------------------------------------------------------------------
+
+function setupGuardrailsStudio() {
+  const textarea = document.getElementById('guardrails-input');
+  const scanBtn = document.getElementById('btn-scan-guardrails');
+  const redactBtn = document.getElementById('btn-redact-guardrails');
+  const preview = document.getElementById('guardrails-preview');
+  const riskVal = document.getElementById('risk-gauge-val');
+  const riskCircle = document.getElementById('risk-gauge-circle');
+  const actionBadge = document.getElementById('guardrails-action-badge');
+  const piiCount = document.getElementById('stat-pii-count');
+  const secretCount = document.getElementById('stat-secret-count');
+  const injCount = document.getElementById('stat-inj-count');
+
+  if (!scanBtn) return;
+
+  function updateRiskGauge(score, action) {
+    if (riskVal) animateCounter(riskVal, score, false, 500);
+    if (riskCircle) {
+      const offset = 264 - (264 * Math.min(score, 100)) / 100;
+      riskCircle.style.strokeDashoffset = offset;
+      if (score > 60) {
+        riskCircle.style.stroke = '#ef4444';
+        if (riskVal) riskVal.style.color = '#f87171';
+      } else if (score > 20) {
+        riskCircle.style.stroke = '#f59e0b';
+        if (riskVal) riskVal.style.color = '#fbbf24';
+      } else {
+        riskCircle.style.stroke = '#10b981';
+        if (riskVal) riskVal.style.color = '#34d399';
+      }
+    }
+    if (actionBadge) {
+      if (action === 'BLOCK' || score > 60) {
+        actionBadge.textContent = 'Status: High Risk';
+        actionBadge.style.color = '#f87171';
+      } else if (action === 'WARN' || score > 20) {
+        actionBadge.textContent = 'Status: Warning';
+        actionBadge.style.color = '#fbbf24';
+      } else {
+        actionBadge.textContent = 'Status: Clean';
+        actionBadge.style.color = '#34d399';
+      }
+    }
+  }
+
+  scanBtn.addEventListener('click', async () => {
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+      if (textarea) textarea.focus();
+      return;
+    }
+    scanBtn.disabled = true;
+    scanBtn.textContent = '⏳ Scanning Threat Vector…';
+    if (preview) preview.style.display = 'none';
+
+    try {
+      const result = await sendToBackground('scan', { text });
+      const d = result && result.data ? result.data : result;
+      const score = Number(d?.risk_score) || 0;
+      const action = d?.action || 'ALLOW';
+      const pii = d?.pii_count ?? (d?.pii_findings?.length ?? 0);
+      const secrets = d?.secrets_count ?? (d?.secrets_findings?.length ?? 0);
+      const injections = d?.injection_count ?? (d?.injection_findings?.length ?? 0);
+
+      updateRiskGauge(score, action);
+      if (piiCount) piiCount.textContent = pii;
+      if (secretCount) secretCount.textContent = secrets;
+      if (injCount) injCount.textContent = injections;
+
+      if (preview) {
+        const report = {
+          risk_score: score,
+          enforcement_action: action,
+          pii_findings: d?.pii_findings || [],
+          secrets_findings: d?.secrets_findings || [],
+          injection_findings: d?.injection_findings || []
+        };
+        preview.textContent = JSON.stringify(report, null, 2);
+        preview.style.display = 'block';
+      }
+    } catch (err) {
+      if (preview) {
+        preview.textContent = `⚠ Scan error: ${err.message}`;
+        preview.style.display = 'block';
+      }
+    } finally {
+      scanBtn.disabled = false;
+      scanBtn.textContent = '🛡️ Run Deep Security Scan';
+    }
+  });
+
+  if (redactBtn) {
+    redactBtn.addEventListener('click', async () => {
+      const text = textarea ? textarea.value.trim() : '';
+      if (!text) return;
+      redactBtn.disabled = true;
+      try {
+        const result = await sendToBackground('scan', { text });
+        const d = result && result.data ? result.data : result;
+        const sanitized = d?.sanitized_text || text;
+        if (preview) {
+          preview.textContent = sanitized;
+          preview.style.display = 'block';
+        }
+      } catch (err) {
+        if (preview) {
+          preview.textContent = `⚠ Redact error: ${err.message}`;
+          preview.style.display = 'block';
+        }
+      } finally {
+        redactBtn.disabled = false;
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Quick Optimizer
 // ---------------------------------------------------------------------------
 
@@ -588,6 +707,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAnalytics();
 
   setupToggles();
+  setupGuardrailsStudio();
   setupTransfer();
   setupQuickOptimizer();
 
