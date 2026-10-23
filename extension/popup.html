@@ -4,231 +4,1171 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ContextArmor AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* Popup-specific overrides */
-    body { width: 380px; min-height: 520px; overflow-x: hidden; background: var(--bg-primary); }
-    
-    .popup-header {
-      padding: 14px 16px;
-      background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-subtle);
+    /* =========================================================================
+       ContextArmor AI — Next-Gen Multi-Studio Dashboard
+       Ultra-sleek Blue Glassmorphism · Ambient Mesh · Dedicated Feature Studios
+       ========================================================================= */
+
+    :root {
+      --ca-bg-base: #0c122b;
+      --ca-glass-surface: rgba(255, 255, 255, 0.10);
+      --ca-glass-border: rgba(255, 255, 255, 0.20);
+      --ca-glass-border-focus: rgba(255, 255, 255, 0.38);
+      --ca-glass-shadow: 0 16px 36px rgba(6, 12, 36, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.32);
+      --ca-text-main: #ffffff;
+      --ca-text-sub: rgba(225, 235, 255, 0.82);
+      --ca-text-muted: rgba(210, 225, 255, 0.65);
+      --ca-dark-btn: #11141a;
+      --ca-dark-btn-hover: #191e28;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      width: 400px;
+      min-height: 590px;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      color: var(--ca-text-main);
+      background: linear-gradient(165deg, #131b43 0%, #1a2a6b 25%, #273d8f 60%, #4a67bf 100%);
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+      user-select: none;
+    }
+
+    /* Sleek custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 99px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Ambient Animated Mesh Orbs & Particles Canvas */
+    .ambient-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #particles-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.65;
+    }
+
+    .ambient-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(42px);
+      opacity: 0.72;
+      mix-blend-mode: screen;
+    }
+
+    .ambient-orb-1 {
+      top: -50px;
+      left: -40px;
+      width: 250px;
+      height: 250px;
+      background: radial-gradient(circle, rgba(99, 138, 255, 0.65) 0%, rgba(59, 130, 246, 0) 70%);
+      animation: driftOrb1 11s ease-in-out infinite alternate;
+    }
+
+    .ambient-orb-2 {
+      bottom: 20px;
+      right: -50px;
+      width: 270px;
+      height: 270px;
+      background: radial-gradient(circle, rgba(167, 139, 250, 0.55) 0%, rgba(99, 102, 241, 0) 70%);
+      animation: driftOrb2 9s ease-in-out infinite alternate;
+    }
+
+    .ambient-ribbon {
+      position: absolute;
+      bottom: -40px;
+      left: -20px;
+      width: 150%;
+      height: 200px;
+      background: radial-gradient(ellipse at 35% 85%, rgba(255, 255, 255, 0.18), transparent 60%),
+                  linear-gradient(55deg, transparent 35%, rgba(191, 219, 254, 0.22) 50%, transparent 68%);
+      filter: blur(14px);
+      animation: waveSilk 7s ease-in-out infinite alternate;
+    }
+
+    @keyframes driftOrb1 {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(32px, 36px) scale(1.15); }
+    }
+
+    @keyframes driftOrb2 {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(-28px, -32px) scale(1.1); }
+    }
+
+    @keyframes waveSilk {
+      0% { transform: rotate(-3deg) translateY(0); opacity: 0.6; }
+      100% { transform: rotate(2deg) translateY(-12px); opacity: 0.95; }
+    }
+
+    /* Main Viewport Container */
+    .popup-viewport {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      min-height: 590px;
+      padding: 16px 18px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+
+    /* Top Nav / Status Bar */
+    .top-header-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      margin-bottom: 10px;
+      animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     }
-    
-    .logo {
-      display: flex;
+
+    .brand-pill {
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      font-size: 11px;
       font-weight: 700;
-      font-size: 15px;
-      color: var(--text-primary);
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 4px 10px;
+      border-radius: 99px;
+      backdrop-filter: blur(10px);
     }
-    
-    .logo-icon {
+
+    /* Segmented Studio Nav Bar */
+    .studio-segmented-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 2px;
+      margin-bottom: 14px;
+      backdrop-filter: blur(14px);
+    }
+
+    .nav-pill {
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 6px 4px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      white-space: nowrap;
+    }
+
+    .nav-pill:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .nav-pill.active {
+      background: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+    }
+
+    .status-badge-mini {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
+      padding: 4px 8px;
+      border-radius: 99px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      font-family: 'JetBrains Mono', monospace;
+      color: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(10px);
+    }
+
+    .status-dot-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+      animation: pulseGreen 2s infinite;
+    }
+
+    .status-offline .status-dot-pulse {
+      background: #EF4444;
+      box-shadow: 0 0 8px #EF4444;
+      animation: none;
+    }
+
+    @keyframes pulseGreen {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .close-btn {
       width: 28px;
       height: 28px;
-      background: linear-gradient(135deg, #6366F1, #8B5CF6);
-      border-radius: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.75);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
-      box-shadow: 0 0 12px rgba(99,102,241,0.4);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(8px);
     }
-    
-    .status-badge {
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      transform: rotate(90deg) scale(1.05);
+    }
+
+    /* Views Switcher Container */
+    .view-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .view-panel.active-view {
+      display: flex;
+      animation: viewSlideFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes viewSlideFade {
+      0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* =========================================================================
+       VIEW 1: HERO SHOWCASE (Matches reference image + direct studio links)
+       ========================================================================= */
+
+    .hero-header {
+      text-align: center;
+      margin-top: 4px;
+      margin-bottom: 20px;
+      animation: fadeInDown 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    }
+
+    .hero-subtitle {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ca-text-muted);
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 99px;
-      border: 1px solid;
-      font-family: var(--font-mono);
+      justify-content: center;
+      gap: 6px;
     }
-    
-    .status-online {
-      background: rgba(16,185,129,0.1);
-      border-color: rgba(16,185,129,0.3);
-      color: var(--accent-emerald);
+
+    .hero-title {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.22;
+      letter-spacing: -0.025em;
+      color: #ffffff;
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
     }
-    
-    .status-offline {
-      background: rgba(239,68,68,0.1);
-      border-color: rgba(239,68,68,0.3);
-      color: var(--accent-crimson);
+
+    /* Frosted Feature Glass Card */
+    .frosted-glass-card {
+      background: var(--ca-glass-surface);
+      border: 1px solid var(--ca-glass-border);
+      border-radius: 22px;
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      box-shadow: var(--ca-glass-shadow);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      animation: glassCardPop 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s backwards;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
     }
-    
-    .section { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
-    .section:last-child { border-bottom: none; }
-    .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
-    
-    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .kpi-card {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      padding: 12px;
-      text-align: center;
+
+    .frosted-glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.32);
+      box-shadow: 0 20px 44px rgba(6, 12, 38, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.4);
     }
-    .kpi-value { font-size: 1.5rem; font-weight: 700; font-family: var(--font-mono); color: var(--accent-indigo); line-height: 1; }
-    .kpi-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
-    
-    .toggle-row {
+
+    @keyframes glassCardPop {
+      0% {
+        opacity: 0;
+        transform: translateY(16px) scale(0.96);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Feature Item Row */
+    .feature-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 10px;
+      border-radius: 14px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      cursor: pointer;
+    }
+
+    .feature-row:hover {
+      background: rgba(255, 255, 255, 0.10);
+      transform: translateY(-2px);
+    }
+
+    .feature-row:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 60px;
+      right: 12px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 100%);
+    }
+
+    .feature-icon-squircle {
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      color: #ffffff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-icon-squircle::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+      transition: left 0.6s ease;
+    }
+
+    .feature-row:hover .feature-icon-squircle {
+      transform: scale(1.08) rotate(3deg);
+    }
+
+    .feature-row:hover .feature-icon-squircle::before {
+      left: 100%;
+    }
+
+    .icon-blue {
+      background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    .icon-green {
+      background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+      box-shadow: 0 6px 18px rgba(5, 150, 105, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    .icon-purple {
+      background: linear-gradient(135deg, #c084fc 0%, #7c3aed 100%);
+      box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    .feature-text {
+      flex: 1;
+    }
+
+    .feature-header-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 0;
     }
-    .toggle-label { font-size: 13px; color: var(--text-secondary); }
-    
-    .toggle-switch {
-      width: 36px; height: 20px; border-radius: 99px;
-      background: #374151; cursor: pointer; position: relative;
-      transition: background 0.2s ease; border: none; outline: none;
-      flex-shrink: 0;
+
+    .feature-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 2px;
+      letter-spacing: -0.01em;
     }
-    .toggle-switch::after {
-      content: ''; position: absolute; width: 16px; height: 16px;
-      background: white; border-radius: 50%; top: 2px; left: 2px;
-      transition: left 0.2s ease;
+
+    .feature-arrow {
+      color: rgba(255, 255, 255, 0.5);
+      transition: transform 0.2s ease, color 0.2s ease;
     }
-    .toggle-switch.active { background: var(--accent-indigo); }
-    .toggle-switch.active::after { left: 18px; }
-    
-    .quick-action-btn {
-      width: 100%; padding: 10px 14px; border-radius: var(--radius-md);
-      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25);
-      color: var(--text-primary); font-size: 13px; cursor: pointer;
-      display: flex; align-items: center; gap: 8px; transition: var(--transition);
-      font-family: var(--font-sans); margin-bottom: 8px;
+
+    .feature-row:hover .feature-arrow {
+      color: #ffffff;
+      transform: translateX(3px);
     }
-    .quick-action-btn:hover { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); }
-    .quick-action-btn:last-child { margin-bottom: 0; }
-    .quick-action-btn.loading { opacity: 0.6; pointer-events: none; }
-    
-    .mini-input {
-      width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-      color: var(--text-primary); border-radius: var(--radius-md); padding: 10px;
-      font-family: var(--font-sans); font-size: 12px; resize: vertical;
-      min-height: 72px; margin-bottom: 8px;
+
+    .feature-desc {
+      font-size: 11.5px;
+      line-height: 1.4;
+      color: var(--ca-text-sub);
+    }
+
+    /* Bottom Dark CTA Button */
+    .cta-container {
+      margin-top: 22px;
+      animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.3s backwards;
+    }
+
+    .btn-dark-pill {
+      width: 100%;
+      padding: 13px 20px;
+      background: var(--ca-dark-btn);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      color: #ffffff;
+      font-size: 14.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-dark-pill::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -60%;
+      width: 40%;
+      height: 200%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+      transform: rotate(25deg);
+      transition: left 0.75s ease;
+    }
+
+    .btn-dark-pill:hover {
+      background: var(--ca-dark-btn-hover);
+      border-color: rgba(255, 255, 255, 0.26);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-dark-pill:hover::after {
+      left: 140%;
+    }
+
+    .btn-dark-pill:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    /* Studio Shared Header */
+    .studio-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .studio-title-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .btn-back-breadcrumb {
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--ca-text-sub);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: all 0.2s ease;
+    }
+
+    .btn-back-breadcrumb:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Glass Panels */
+    .glass-panel {
+      background: var(--ca-glass-surface);
+      border: 1px solid var(--ca-glass-border);
+      border-radius: 16px;
+      padding: 13px;
+      backdrop-filter: blur(20px);
+      box-shadow: var(--ca-glass-shadow);
+      margin-bottom: 10px;
+    }
+
+    .panel-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ca-text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Gauge / Meter Component */
+    .meter-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 6px 0;
+    }
+
+    .gauge-wrapper {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gauge-text {
+      position: absolute;
+      text-align: center;
+    }
+
+    .gauge-value {
+      font-size: 14px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+    }
+
+    .gauge-unit {
+      font-size: 8px;
+      color: var(--ca-text-muted);
+      text-transform: uppercase;
+    }
+
+    /* Inputs, Buttons, & Tags */
+    .glass-textarea {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.32);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      resize: vertical;
+      min-height: 70px;
+      outline: none;
       box-sizing: border-box;
+      transition: all 0.2s ease;
+      margin-bottom: 8px;
     }
-    .mini-input:focus { outline: none; border-color: var(--accent-indigo); box-shadow: 0 0 0 3px var(--accent-indigo-glow); }
-    
-    .output-preview {
-      background: #0d1117; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-      padding: 10px; font-family: var(--font-mono); font-size: 11px; color: #e6edf3;
-      max-height: 120px; overflow-y: auto; white-space: pre-wrap; margin-top: 8px;
+
+    .glass-textarea:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.3);
+    }
+
+    .btn-action-primary {
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-action-primary:hover {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
+    }
+
+    .btn-action-secondary {
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-action-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-flex-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tag-chip {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* iOS Style Toggle Switch */
+    .toggle-row-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+    }
+
+    .toggle-label-text {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toggle-pill-switch {
+      width: 38px;
+      height: 20px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      cursor: pointer;
+      position: relative;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      flex-shrink: 0;
+      outline: none;
+    }
+
+    .toggle-pill-switch::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .toggle-pill-switch.active {
+      background: #3b82f6;
+      border-color: #60a5fa;
+      box-shadow: 0 0 14px rgba(59, 130, 246, 0.5);
+    }
+
+    .toggle-pill-switch.active::after {
+      left: 20px;
+    }
+
+    /* KPI Grid in Analytics View */
+    .kpi-grid-4 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .kpi-stat-card {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+      backdrop-filter: blur(14px);
+      transition: all 0.2s ease;
+    }
+
+    .kpi-stat-card:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.28);
+      transform: translateY(-2px);
+    }
+
+    .kpi-stat-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ffffff;
+      line-height: 1.1;
+    }
+
+    .kpi-stat-label {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--ca-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 4px;
+    }
+
+    .code-preview-box {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #e2e8f0;
+      max-height: 110px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin-top: 8px;
       display: none;
     }
-    
-    .action-row { display: flex; gap: 6px; margin-top: 6px; }
-    .action-row .btn-sm {
-      flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 12px;
-      border: 1px solid var(--border-subtle); cursor: pointer; background: var(--bg-elevated);
-      color: var(--text-secondary); font-family: var(--font-sans); transition: var(--transition);
+
+    .savings-badge-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 4px 10px;
+      border-radius: 8px;
+      margin-top: 6px;
+      display: none;
     }
-    .action-row .btn-sm:hover { border-color: var(--border-medium); color: var(--text-primary); }
-    .action-row .btn-sm.primary { background: var(--accent-indigo); border-color: var(--accent-indigo); color: white; }
-    .action-row .btn-sm.primary:hover { filter: brightness(1.1); }
-    
-    .dashboard-btn {
-      width: 100%; padding: 12px; background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
-      border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md);
-      color: var(--accent-indigo); font-size: 13px; font-weight: 600; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      transition: var(--transition); font-family: var(--font-sans);
+
+    /* Keyframes */
+    @keyframes fadeInDown {
+      0% { opacity: 0; transform: translateY(-8px); }
+      100% { opacity: 1; transform: translateY(0); }
     }
-    .dashboard-btn:hover { background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3)); box-shadow: 0 0 20px rgba(99,102,241,0.3); }
-    
-    .token-stat { font-family: var(--font-mono); font-size: 11px; color: var(--accent-emerald); margin-top: 4px; }
+
+    @keyframes fadeInUp {
+      0% { opacity: 0; transform: translateY(12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 <body>
-  <div class="popup-header">
-    <div class="logo">
-      <div class="logo-icon">🛡️</div>
-      <span>ContextArmor AI</span>
-    </div>
-    <div class="status-badge status-offline" id="backend-status">
-      <span id="status-dot">●</span>
-      <span id="status-text">Checking...</span>
-    </div>
+  <!-- Ambient Luminous Mesh Lighting & Particle Canvas -->
+  <div class="ambient-container">
+    <canvas id="particles-canvas"></canvas>
+    <div class="ambient-orb ambient-orb-1"></div>
+    <div class="ambient-orb ambient-orb-2"></div>
+    <div class="ambient-ribbon"></div>
   </div>
 
-  <!-- KPI Metrics -->
-  <div class="section">
-    <div class="section-title">Protection Stats</div>
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-value" id="kpi-scans">—</div>
-        <div class="kpi-label">Scans Run</div>
+  <div class="popup-viewport">
+    <!-- Top Header Row with Brand & Status -->
+    <div class="top-header-row">
+      <div class="brand-pill">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>ContextArmor AI</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-value" id="kpi-blocked" style="color: var(--accent-crimson)">—</div>
-        <div class="kpi-label">Threats Blocked</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value" id="kpi-tokens" style="color: var(--accent-emerald)">—</div>
-        <div class="kpi-label">Tokens Saved</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value" id="kpi-risk" style="color: var(--accent-amber)">—</div>
-        <div class="kpi-label">Avg Risk Score</div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="status-badge-mini status-offline" id="backend-status">
+          <span class="status-dot-pulse" id="status-dot"></span>
+          <span id="status-text">Checking...</span>
+        </div>
+
+        <button class="close-btn" id="btn-close-popup" aria-label="Close" title="Close popup">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
+        </button>
       </div>
     </div>
-  </div>
 
-  <!-- Settings Toggles -->
-  <div class="section">
-    <div class="section-title">Settings</div>
-    <div class="toggle-row">
-      <span class="toggle-label">🔒 Auto-Intercept PII</span>
-      <button class="toggle-switch active" id="toggle-auto-intercept" aria-label="Toggle Auto-Intercept PII"></button>
+    <!-- Full-Width Studio Segmented Navigation Bar -->
+    <div class="studio-segmented-bar">
+      <button class="nav-pill active" id="tab-overview" title="Showcase Overview">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span>Overview</span>
+      </button>
+      <button class="nav-pill" id="tab-guardrails" title="PII & Secret Guardrails">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Shield</span>
+      </button>
+      <button class="nav-pill" id="tab-compression" title="AST Token Compression">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>Compress</span>
+      </button>
+      <button class="nav-pill" id="tab-transfer" title="Context Transfer Bridge">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Bridge</span>
+      </button>
+      <button class="nav-pill" id="tab-analytics" title="Live Telemetry Analytics">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics</span>
+      </button>
     </div>
-    <div class="toggle-row">
-      <span class="toggle-label">📐 AST Signature Pruning</span>
-      <button class="toggle-switch" id="toggle-signature" aria-label="Toggle AST Signature Pruning"></button>
-    </div>
-  </div>
 
-  <!-- Quick Actions -->
-  <div class="section">
-    <div class="section-title">Quick Actions</div>
-    <button class="quick-action-btn" id="btn-scrape-transfer">
-      <span>📦</span>
-      <span>Scrape &amp; Transfer Current Tab Chat</span>
-      <span id="transfer-spinner" style="display:none">⏳</span>
-    </button>
-    
-    <div id="transfer-output" class="output-preview"></div>
-    <div id="transfer-actions" class="action-row" style="display:none">
-      <button class="btn-sm" id="btn-copy-bridge">📋 Copy</button>
-      <button class="btn-sm primary" id="btn-open-fresh">🚀 Open Fresh Chat</button>
-    </div>
-  </div>
+    <!-- =====================================================================
+         VIEW 1: HERO SHOWCASE (Feature cards deep-link to dedicated studios)
+         ===================================================================== -->
+    <div class="view-panel active-view" id="view-hero">
+      <div class="hero-header">
+        <div class="hero-subtitle">
+          <span>WELCOME TO CONTEXTARMOR</span>
+        </div>
+        <h1 class="hero-title">
+          Unlock powerful<br>AI protection
+        </h1>
+      </div>
 
-  <!-- Quick Optimizer -->
-  <div class="section">
-    <div class="section-title">Quick Optimizer</div>
-    <textarea class="mini-input" id="quick-input" placeholder="Paste any prompt or code snippet to optimize..."></textarea>
-    <div class="action-row">
-      <button class="btn-sm" id="btn-scan-quick">🛡️ Scan</button>
-      <button class="btn-sm primary" id="btn-optimize-quick">✨ Optimize</button>
-    </div>
-    <div id="quick-output" class="output-preview"></div>
-    <div id="quick-token-stat" class="token-stat" style="display:none"></div>
-  </div>
+      <!-- Frosted Glass Card with 3 Dedicated Feature Studios -->
+      <div class="frosted-glass-card">
+        <!-- Feature 1: Blue Squircle -> Takes user directly to Guardrails Studio -->
+        <div class="feature-row" id="hero-btn-guardrails">
+          <div class="feature-icon-squircle icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-header-row">
+              <span class="feature-name">Active Guardrails &amp; PII Shield</span>
+              <span class="feature-arrow">→</span>
+            </div>
+            <div class="feature-desc">Instantly detect &amp; redact PII, API secrets, and prompt injections</div>
+          </div>
+        </div>
 
-  <!-- Footer -->
-  <div class="section">
-    <button class="dashboard-btn" id="btn-open-dashboard">
-      📊 Open Full Dashboard &amp; Live Demo ↗
-    </button>
+        <!-- Feature 2: Green Squircle -> Takes user directly to Compression Studio -->
+        <div class="feature-row" id="hero-btn-compression">
+          <div class="feature-icon-squircle icon-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 14h6m-6 4h16M4 6h16M4 10h10"/>
+              <circle cx="19" cy="11" r="2.5" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-header-row">
+              <span class="feature-name">Smart AST Token Compression</span>
+              <span class="feature-arrow">→</span>
+            </div>
+            <div class="feature-desc">Losslessly compress Python &amp; JS code up to 65% to slash context costs</div>
+          </div>
+        </div>
+
+        <!-- Feature 3: Purple Squircle -> Takes user directly to Context Bridge Studio -->
+        <div class="feature-row" id="hero-btn-transfer">
+          <div class="feature-icon-squircle icon-purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-header-row">
+              <span class="feature-name">Cross-Model Context Bridge</span>
+              <span class="feature-arrow">→</span>
+            </div>
+            <div class="feature-desc">Seamlessly transfer active conversations across ChatGPT, Claude, &amp; Gemini</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Dark Pill CTA Button -->
+      <div class="cta-container">
+        <button class="btn-dark-pill" id="btn-get-started">
+          <span>Launch Protection Studio</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         VIEW 2: DEDICATED GUARDRAILS & PII SHIELD STUDIO
+         ===================================================================== -->
+    <div class="view-panel" id="view-guardrails">
+      <div class="studio-header">
+        <div class="studio-title-badge">
+          <span>🛡️ Guardrails &amp; Security Studio</span>
+        </div>
+        <button class="btn-back-breadcrumb" data-back="overview">
+          ← Overview
+        </button>
+      </div>
+
+      <!-- Risk Gauge & Live Scan Status -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Real-Time Risk Meter</span>
+          <span class="tag-chip" id="guardrails-action-badge">Status: Clean</span>
+        </div>
+        <div class="meter-container">
+          <div class="gauge-wrapper">
+            <svg width="72" height="72" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8"/>
+              <circle id="risk-gauge-circle" class="ca-ring-gauge" cx="50" cy="50" r="42" fill="none" stroke="#10b981" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="264"/>
+            </svg>
+            <div class="gauge-text">
+              <div class="gauge-value" id="risk-gauge-val" style="color: #34d399">0</div>
+              <div class="gauge-unit">Risk</div>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: var(--ca-text-sub); max-width: 220px; line-height: 1.4;">
+            <div>• <strong>PII Detected:</strong> <span id="stat-pii-count">0</span> items</div>
+            <div>• <strong>Secrets Detected:</strong> <span id="stat-secret-count">0</span> items</div>
+            <div>• <strong>Prompt Injections:</strong> <span id="stat-inj-count">0</span> found</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Threat Scanner Sandbox -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Interactive Threat Scanner</span>
+        </div>
+        <textarea class="glass-textarea" id="guardrails-input" placeholder="Paste test prompt or sensitive text (emails, API keys, injection tests)..."></textarea>
+        <div class="btn-flex-row">
+          <button class="btn-action-primary" id="btn-scan-guardrails" style="flex:1;">
+            <span>🛡️ Run Deep Security Scan</span>
+          </button>
+          <button class="btn-action-secondary" id="btn-redact-guardrails">
+            <span>✂️ Redact PII</span>
+          </button>
+        </div>
+        <div id="guardrails-preview" class="code-preview-box"></div>
+      </div>
+
+      <!-- Guardrail Rules Toggles -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Shield Enforcement Policies</span>
+        </div>
+        <div class="toggle-row-item">
+          <span class="toggle-label-text">🔒 Intercept PII &amp; Credentials</span>
+          <button class="toggle-pill-switch active" id="toggle-auto-intercept" aria-label="Toggle Auto-Intercept"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         VIEW 3: DEDICATED AST CODE & PROMPT COMPRESSION STUDIO
+         ===================================================================== -->
+    <div class="view-panel" id="view-compression">
+      <div class="studio-header">
+        <div class="studio-title-badge">
+          <span>⚡ Smart AST Compression Studio</span>
+        </div>
+        <button class="btn-back-breadcrumb" data-back="overview">
+          ← Overview
+        </button>
+      </div>
+
+      <!-- Compression Gauge & Savings Visualizer -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Token Reduction Efficiency</span>
+          <span class="tag-chip" style="color: #34d399;" id="compression-reduction-chip">0% Saved</span>
+        </div>
+        <div class="meter-container">
+          <div class="gauge-wrapper">
+            <svg width="72" height="72" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8"/>
+              <circle id="compress-gauge-circle" class="ca-ring-gauge" cx="50" cy="50" r="42" fill="none" stroke="#38bdf8" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="264"/>
+            </svg>
+            <div class="gauge-text">
+              <div class="gauge-value" id="compress-gauge-val" style="color: #38bdf8">0%</div>
+              <div class="gauge-unit">Reduction</div>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: var(--ca-text-sub); max-width: 220px; line-height: 1.4;">
+            <div>• <strong>Original Tokens:</strong> <span id="comp-orig-tokens">—</span></div>
+            <div>• <strong>Compressed Tokens:</strong> <span id="comp-new-tokens">—</span></div>
+            <div>• <strong>Net Saved:</strong> <span id="comp-saved-tokens" style="color:#34d399;">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compression Sandbox -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Code or Prompt Sandbox</span>
+        </div>
+        <textarea class="glass-textarea" id="compress-input" placeholder="Paste Python or JavaScript code snippet to losslessly compress..."></textarea>
+        <div class="btn-flex-row">
+          <button class="btn-action-primary" id="btn-run-compress" style="flex:1;">
+            <span>⚡ Compress AST Code</span>
+          </button>
+          <button class="btn-action-secondary" id="btn-copy-compressed" style="display:none;">
+            <span>📋 Copy</span>
+          </button>
+        </div>
+        <div id="compress-output" class="code-preview-box"></div>
+        <div id="quick-token-stat" class="savings-badge-pill"></div>
+      </div>
+
+      <!-- Pruning Mode Switch -->
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Pruning Technique</span>
+        </div>
+        <div class="toggle-row-item">
+          <span class="toggle-label-text">📐 AST Signature Mode (Max Savings)</span>
+          <button class="toggle-pill-switch" id="toggle-signature" aria-label="Toggle Signature Pruning"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         VIEW 4: DEDICATED CROSS-MODEL CONTEXT BRIDGE STUDIO
+         ===================================================================== -->
+    <div class="view-panel" id="view-transfer">
+      <div class="studio-header">
+        <div class="studio-title-badge">
+          <span>🔄 Cross-Model Context Bridge</span>
+        </div>
+        <button class="btn-back-breadcrumb" data-back="overview">
+          ← Overview
+        </button>
+      </div>
+
+      <div class="glass-panel">
+        <div class="panel-label">
+          <span>Active Session Transporter</span>
+          <span class="tag-chip">ChatGPT · Claude · Gemini</span>
+        </div>
+        <p style="font-size: 11.5px; color: var(--ca-text-sub); line-height: 1.4; margin-bottom: 10px;">
+          Automatically extracts turns from your current tab conversation, extracts core entities &amp; task priorities, and generates a unified continuation bridge prompt.
+        </p>
+        <button class="btn-action-primary" id="btn-scrape-transfer" style="width:100%;">
+          <span>📦 Scrape &amp; Generate Continuation Bridge</span>
+          <span id="transfer-spinner" style="display:none">⏳</span>
+        </button>
+        <div id="transfer-output" class="code-preview-box"></div>
+        <div id="transfer-actions" class="btn-flex-row" style="display:none; margin-top:8px;">
+          <button class="btn-action-secondary" id="btn-copy-bridge" style="flex:1;">📋 Copy Bridge</button>
+          <button class="btn-action-primary" id="btn-open-fresh" style="flex:1;">🚀 Launch ChatGPT</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         VIEW 5: LIVE TELEMETRY & ANALYTICS DASHBOARD
+         ===================================================================== -->
+    <div class="view-panel" id="view-analytics">
+      <div class="studio-header">
+        <div class="studio-title-badge">
+          <span>📊 Live Protection Telemetry</span>
+        </div>
+        <button class="btn-back-breadcrumb" data-back="overview">
+          ← Overview
+        </button>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="kpi-grid-4">
+        <div class="kpi-stat-card">
+          <div class="kpi-stat-value" id="kpi-scans">—</div>
+          <div class="kpi-stat-label">Total Scans</div>
+        </div>
+        <div class="kpi-stat-card">
+          <div class="kpi-stat-value" id="kpi-blocked" style="color: #f87171">—</div>
+          <div class="kpi-stat-label">Threats Blocked</div>
+        </div>
+        <div class="kpi-stat-card">
+          <div class="kpi-stat-value" id="kpi-tokens" style="color: #34d399">—</div>
+          <div class="kpi-stat-label">Tokens Saved</div>
+        </div>
+        <div class="kpi-stat-card">
+          <div class="kpi-stat-value" id="kpi-risk" style="color: #fbbf24">—</div>
+          <div class="kpi-stat-label">Avg Risk Score</div>
+        </div>
+      </div>
+
+      <!-- Full Dashboard Launcher -->
+      <button class="btn-dark-pill" id="btn-open-dashboard" style="margin-top:4px;">
+        <span>Open Full Analytics Dashboard ↗</span>
+      </button>
+    </div>
   </div>
 
   <script src="popup.js"></script>

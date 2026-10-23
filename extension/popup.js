@@ -26,6 +26,72 @@ function sendToBackground(action, data = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Interactive Ambient Particle Engine
+// ---------------------------------------------------------------------------
+
+function initParticlesCanvas() {
+  const canvas = document.getElementById('particles-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let width = canvas.width = canvas.parentElement.offsetWidth || 400;
+  let height = canvas.height = canvas.parentElement.offsetHeight || 600;
+
+  window.addEventListener('resize', () => {
+    if (!canvas.parentElement) return;
+    width = canvas.width = canvas.parentElement.offsetWidth || 400;
+    height = canvas.height = canvas.parentElement.offsetHeight || 600;
+  });
+
+  const count = 26;
+  const particles = [];
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      radius: Math.random() * 1.8 + 1,
+      alpha: Math.random() * 0.45 + 0.2,
+    });
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, width, height);
+    for (let i = 0; i < count; i++) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = width;
+      if (p.x > width) p.x = 0;
+      if (p.y < 0) p.y = height;
+      if (p.y > height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(186, 215, 255, ${p.alpha})`;
+      ctx.fill();
+
+      for (let j = i + 1; j < count; j++) {
+        const p2 = particles[j];
+        const dx = p.x - p2.x;
+        const dy = p.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 65) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = `rgba(147, 197, 253, ${0.16 * (1 - dist / 65)})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+}
+
+// ---------------------------------------------------------------------------
 // Number formatting
 // ---------------------------------------------------------------------------
 
@@ -67,6 +133,46 @@ async function checkBackendStatus() {
 }
 
 // ---------------------------------------------------------------------------
+// Animated Counters & Number Formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Animate a numeric element from 0 to target value with easing.
+ * @param {HTMLElement} element
+ * @param {number} target
+ * @param {boolean} isDecimal
+ * @param {number} duration
+ */
+function animateCounter(element, target, isDecimal = false, duration = 650) {
+  if (!element) return;
+  const num = Number(target) || 0;
+  if (num === 0) {
+    element.textContent = isDecimal ? '0.0' : '0';
+    return;
+  }
+  const startTime = performance.now();
+  function update(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    // Ease-out cubic
+    const factor = 1 - Math.pow(1 - progress, 3);
+    const currentVal = num * factor;
+    if (isDecimal) {
+      element.textContent = currentVal.toFixed(1);
+    } else if (num >= 1000) {
+      element.textContent = (currentVal / 1000).toFixed(1) + 'k';
+    } else {
+      element.textContent = String(Math.round(currentVal));
+    }
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      element.textContent = isDecimal ? num.toFixed(1) : formatNumber(num);
+    }
+  }
+  requestAnimationFrame(update);
+}
+
+// ---------------------------------------------------------------------------
 // Analytics / KPI cards
 // ---------------------------------------------------------------------------
 
@@ -90,12 +196,12 @@ async function loadAnalytics() {
   const tokensEl = document.getElementById('kpi-tokens');
   const riskEl = document.getElementById('kpi-risk');
 
-  if (scansEl) scansEl.textContent = formatNumber(totalScans);
-  if (blockedEl) blockedEl.textContent = formatNumber(Number(data.threats_blocked) || 0);
-  if (tokensEl) tokensEl.textContent = formatNumber(Number(data.total_tokens_saved) || 0);
+  if (scansEl) animateCounter(scansEl, totalScans, false);
+  if (blockedEl) animateCounter(blockedEl, Number(data.threats_blocked) || 0, false);
+  if (tokensEl) animateCounter(tokensEl, Number(data.total_tokens_saved) || 0, false);
   if (riskEl) {
-    const avg = data.average_risk_score;
-    riskEl.textContent = avg != null ? Number(avg).toFixed(1) : '0.0';
+    const avg = data.average_risk_score != null ? Number(data.average_risk_score) : 0;
+    animateCounter(riskEl, avg, true);
   }
 }
 
@@ -202,10 +308,22 @@ function setupTransfer() {
     lastBridgePrompt = '';
 
     try {
+      if (!chrome.tabs || !chrome.tabs.query) {
+        outputDiv.textContent = 'ℹ Extension Context: Active tab detection connects live to ChatGPT, Claude, and Gemini.';
+        outputDiv.style.display = 'block';
+        return;
+      }
+
       // Get the active tab.
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab || !tab.id) {
         outputDiv.textContent = '⚠ Could not determine the active tab.';
+        outputDiv.style.display = 'block';
+        return;
+      }
+
+      if (!chrome.scripting || !chrome.scripting.executeScript) {
+        outputDiv.textContent = 'ℹ Scrapes active conversation in supported AI model tabs.';
         outputDiv.style.display = 'block';
         return;
       }
@@ -281,6 +399,215 @@ function setupTransfer() {
       // Non-fatal — still open the tab.
     }
     chrome.tabs.create({ url: 'https://chatgpt.com/' });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Guardrails & Security Studio Controller
+// ---------------------------------------------------------------------------
+
+function setupGuardrailsStudio() {
+  const textarea = document.getElementById('guardrails-input');
+  const scanBtn = document.getElementById('btn-scan-guardrails');
+  const redactBtn = document.getElementById('btn-redact-guardrails');
+  const preview = document.getElementById('guardrails-preview');
+  const riskVal = document.getElementById('risk-gauge-val');
+  const riskCircle = document.getElementById('risk-gauge-circle');
+  const actionBadge = document.getElementById('guardrails-action-badge');
+  const piiCount = document.getElementById('stat-pii-count');
+  const secretCount = document.getElementById('stat-secret-count');
+  const injCount = document.getElementById('stat-inj-count');
+
+  if (!scanBtn) return;
+
+  function updateRiskGauge(score, action) {
+    if (riskVal) animateCounter(riskVal, score, false, 500);
+    if (riskCircle) {
+      const offset = 264 - (264 * Math.min(score, 100)) / 100;
+      riskCircle.style.strokeDashoffset = offset;
+      if (score > 60) {
+        riskCircle.style.stroke = '#ef4444';
+        if (riskVal) riskVal.style.color = '#f87171';
+      } else if (score > 20) {
+        riskCircle.style.stroke = '#f59e0b';
+        if (riskVal) riskVal.style.color = '#fbbf24';
+      } else {
+        riskCircle.style.stroke = '#10b981';
+        if (riskVal) riskVal.style.color = '#34d399';
+      }
+    }
+    if (actionBadge) {
+      if (action === 'BLOCK' || score > 60) {
+        actionBadge.textContent = 'Status: High Risk';
+        actionBadge.style.color = '#f87171';
+      } else if (action === 'WARN' || score > 20) {
+        actionBadge.textContent = 'Status: Warning';
+        actionBadge.style.color = '#fbbf24';
+      } else {
+        actionBadge.textContent = 'Status: Clean';
+        actionBadge.style.color = '#34d399';
+      }
+    }
+  }
+
+  scanBtn.addEventListener('click', async () => {
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+      if (textarea) textarea.focus();
+      return;
+    }
+    scanBtn.disabled = true;
+    scanBtn.textContent = '⏳ Scanning Threat Vector…';
+    if (preview) preview.style.display = 'none';
+
+    try {
+      const result = await sendToBackground('scan', { text });
+      const d = result && result.data ? result.data : result;
+      const score = Number(d?.risk_score) || 0;
+      const action = d?.action || 'ALLOW';
+      const pii = d?.pii_count ?? (d?.pii_findings?.length ?? 0);
+      const secrets = d?.secrets_count ?? (d?.secrets_findings?.length ?? 0);
+      const injections = d?.injection_count ?? (d?.injection_findings?.length ?? 0);
+
+      updateRiskGauge(score, action);
+      if (piiCount) piiCount.textContent = pii;
+      if (secretCount) secretCount.textContent = secrets;
+      if (injCount) injCount.textContent = injections;
+
+      if (preview) {
+        const report = {
+          risk_score: score,
+          enforcement_action: action,
+          pii_findings: d?.pii_findings || [],
+          secrets_findings: d?.secrets_findings || [],
+          injection_findings: d?.injection_findings || []
+        };
+        preview.textContent = JSON.stringify(report, null, 2);
+        preview.style.display = 'block';
+      }
+    } catch (err) {
+      if (preview) {
+        preview.textContent = `⚠ Scan error: ${err.message}`;
+        preview.style.display = 'block';
+      }
+    } finally {
+      scanBtn.disabled = false;
+      scanBtn.textContent = '🛡️ Run Deep Security Scan';
+    }
+  });
+
+  if (redactBtn) {
+    redactBtn.addEventListener('click', async () => {
+      const text = textarea ? textarea.value.trim() : '';
+      if (!text) return;
+      redactBtn.disabled = true;
+      try {
+        const result = await sendToBackground('scan', { text });
+        const d = result && result.data ? result.data : result;
+        const sanitized = d?.sanitized_text || text;
+        if (preview) {
+          preview.textContent = sanitized;
+          preview.style.display = 'block';
+        }
+      } catch (err) {
+        if (preview) {
+          preview.textContent = `⚠ Redact error: ${err.message}`;
+          preview.style.display = 'block';
+        }
+      } finally {
+        redactBtn.disabled = false;
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dedicated AST Code & Prompt Compression Studio Controller
+// ---------------------------------------------------------------------------
+
+function setupCompressionStudio() {
+  const textarea = document.getElementById('compress-input');
+  const runBtn = document.getElementById('btn-run-compress');
+  const copyBtn = document.getElementById('btn-copy-compressed');
+  const outputDiv = document.getElementById('compress-output');
+  const tokenStatDiv = document.getElementById('quick-token-stat');
+  const gaugeVal = document.getElementById('compress-gauge-val');
+  const gaugeCircle = document.getElementById('compress-gauge-circle');
+  const reductionChip = document.getElementById('compression-reduction-chip');
+  const origTokensEl = document.getElementById('comp-orig-tokens');
+  const newTokensEl = document.getElementById('comp-new-tokens');
+  const savedTokensEl = document.getElementById('comp-saved-tokens');
+
+  if (!runBtn) return;
+
+  runBtn.addEventListener('click', async () => {
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+      if (textarea) textarea.focus();
+      return;
+    }
+
+    runBtn.disabled = true;
+    runBtn.textContent = '⚡ Optimizing AST…';
+    if (outputDiv) outputDiv.style.display = 'none';
+
+    chrome.storage.local.get(['signaturePruning'], async (prefs) => {
+      const mode = prefs.signaturePruning ? 'signatures' : 'lossless';
+      try {
+        const result = await sendToBackground('optimize', { text, mode });
+        const d = result && result.data ? result.data : result;
+        const optimized = d?.optimized_prompt || d?.optimized || text;
+
+        if (outputDiv) {
+          outputDiv.textContent = optimized;
+          outputDiv.style.display = 'block';
+        }
+
+        if (copyBtn) {
+          copyBtn.style.display = 'inline-flex';
+          copyBtn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(optimized);
+              copyBtn.textContent = '✅ Copied!';
+              setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+            } catch (_) {}
+          };
+        }
+
+        const origTokens = Number(d?.original_tokens) || Math.max(1, (text.length / 4) | 0);
+        const savedTokens = Number(d?.tokens_saved) || 0;
+        const newTokens = Math.max(0, origTokens - savedTokens);
+        const reductionPct = Number(d?.reduction_percentage) || (origTokens > 0 ? (savedTokens / origTokens) * 100 : 0);
+
+        if (origTokensEl) origTokensEl.textContent = origTokens;
+        if (newTokensEl) newTokensEl.textContent = newTokens;
+        if (savedTokensEl) savedTokensEl.textContent = `${savedTokens} (${reductionPct.toFixed(1)}%)`;
+
+        if (gaugeVal) {
+          gaugeVal.textContent = `${Math.round(reductionPct)}%`;
+        }
+        if (reductionChip) {
+          reductionChip.textContent = `${reductionPct.toFixed(1)}% Saved`;
+        }
+        if (gaugeCircle) {
+          const offset = 264 - (264 * Math.min(reductionPct, 100)) / 100;
+          gaugeCircle.style.strokeDashoffset = offset;
+        }
+
+        if (tokenStatDiv && savedTokens > 0) {
+          tokenStatDiv.textContent = `✅ Saved ${savedTokens} tokens (${reductionPct.toFixed(1)}% reduction)`;
+          tokenStatDiv.style.display = 'block';
+        }
+      } catch (err) {
+        if (outputDiv) {
+          outputDiv.textContent = `⚠ Optimization error: ${err.message}`;
+          outputDiv.style.display = 'block';
+        }
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '⚡ Compress AST Code';
+      }
+    });
   });
 }
 
@@ -387,18 +714,110 @@ function setupQuickOptimizer() {
 }
 
 // ---------------------------------------------------------------------------
+// Multi-Studio View Router
+// ---------------------------------------------------------------------------
+
+const STUDIOS = ['overview', 'guardrails', 'compression', 'transfer', 'analytics'];
+
+function navigateTo(studioName) {
+  if (!STUDIOS.includes(studioName)) studioName = 'overview';
+
+  STUDIOS.forEach((name) => {
+    const panelId = name === 'overview' ? 'view-hero' : `view-${name}`;
+    const tabId = `tab-${name}`;
+    const panel = document.getElementById(panelId);
+    const tab = document.getElementById(tabId);
+
+    if (panel) {
+      if (name === studioName) {
+        panel.classList.add('active-view');
+      } else {
+        panel.classList.remove('active-view');
+      }
+    }
+
+    if (tab) {
+      if (name === studioName) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
+    }
+  });
+
+  if (studioName === 'analytics') {
+    loadAnalytics();
+  }
+}
+
+function setupViewNavigation() {
+  // Navigation tabs
+  STUDIOS.forEach((name) => {
+    const tab = document.getElementById(`tab-${name}`);
+    if (tab) {
+      tab.addEventListener('click', () => navigateTo(name));
+    }
+  });
+
+  // Hero feature cards -> deep-link directly to their specific studios!
+  const heroGuardrails = document.getElementById('hero-btn-guardrails');
+  if (heroGuardrails) {
+    heroGuardrails.addEventListener('click', () => navigateTo('guardrails'));
+  }
+
+  const heroCompression = document.getElementById('hero-btn-compression');
+  if (heroCompression) {
+    heroCompression.addEventListener('click', () => navigateTo('compression'));
+  }
+
+  const heroTransfer = document.getElementById('hero-btn-transfer');
+  if (heroTransfer) {
+    heroTransfer.addEventListener('click', () => navigateTo('transfer'));
+  }
+
+  // Get Started button
+  const btnGetStarted = document.getElementById('btn-get-started');
+  if (btnGetStarted) {
+    btnGetStarted.addEventListener('click', () => navigateTo('guardrails'));
+  }
+
+  // Back breadcrumb buttons
+  document.querySelectorAll('.btn-back-breadcrumb').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-back') || 'overview';
+      navigateTo(target);
+    });
+  });
+
+  // Close popup button
+  const btnClose = document.getElementById('btn-close-popup');
+  if (btnClose) {
+    btnClose.addEventListener('click', () => {
+      window.close();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initParticlesCanvas();
+  setupViewNavigation();
   await checkBackendStatus();
   await loadAnalytics();
 
   setupToggles();
+  setupGuardrailsStudio();
+  setupCompressionStudio();
   setupTransfer();
   setupQuickOptimizer();
 
-  document.getElementById('btn-open-dashboard').addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-  });
+  const openDashBtn = document.getElementById('btn-open-dashboard');
+  if (openDashBtn) {
+    openDashBtn.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+    });
+  }
 });
