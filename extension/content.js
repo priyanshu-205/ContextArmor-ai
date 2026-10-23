@@ -342,65 +342,71 @@ function createHudHTML() {
   #ca-hud {
     position: fixed;
     bottom: 80px;
-    right: 20px;
+    right: 24px;
     z-index: 2147483647;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
   #ca-status-pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(17,24,39,0.95);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(22, 33, 76, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 999px;
-    padding: 8px 16px;
+    padding: 8px 18px;
     font-size: 13px;
+    font-weight: 600;
     color: #F9FAFB;
     cursor: pointer;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    transition: all 0.2s ease;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 10px 28px rgba(10, 18, 48, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     min-width: 180px;
     justify-content: center;
     user-select: none;
   }
   #ca-status-pill:hover {
-    background: rgba(30,40,60,0.98);
-    border-color: rgba(255,255,255,0.22);
+    background: rgba(30, 48, 110, 0.95);
+    border-color: rgba(255, 255, 255, 0.35);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 34px rgba(10, 18, 48, 0.5), 0 0 20px rgba(99, 140, 255, 0.35);
   }
   #ca-actions {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: rgba(17,24,39,0.95);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
+    background: rgba(18, 27, 65, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
     padding: 10px;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 16px 36px rgba(10, 18, 48, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25);
   }
   .ca-btn {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
     padding: 8px 14px;
     font-size: 13px;
+    font-weight: 500;
     color: #F9FAFB;
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: inherit;
   }
-  .ca-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+  .ca-btn:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.25); transform: translateY(-1px); }
   .ca-btn.loading { opacity: 0.6; pointer-events: none; }
-  .ca-btn-primary { border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
-  .ca-btn-primary:hover { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.6); }
+  .ca-btn-primary { background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(99, 102, 241, 0.4)); border-color: rgba(147, 197, 253, 0.35); color: #ffffff; }
+  .ca-btn-primary:hover { background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(99, 102, 241, 0.6)); border-color: rgba(147, 197, 253, 0.5); box-shadow: 0 0 16px rgba(99, 140, 255, 0.35); }
   #ca-toggle-btn {
     position: fixed; bottom: 80px; right: 20px; z-index: 2147483647;
     width: 44px; height: 44px; border-radius: 50%;
@@ -411,12 +417,13 @@ function createHudHTML() {
   }
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: rgba(26,34,52,0.98); border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px; padding: 12px 20px;
-    color: #F9FAFB; font-size: 13px; z-index: 2147483647;
+    background: rgba(22, 33, 76, 0.96); border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px; padding: 12px 20px;
+    color: #F9FAFB; font-size: 13px; font-weight: 500; z-index: 2147483647;
     display: flex; align-items: center; gap: 8px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-    animation: fadeInUp 0.3s ease; font-family: 'Inter', system-ui, sans-serif;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 12px 36px rgba(10, 18, 48, 0.6);
+    animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); font-family: 'Inter', system-ui, sans-serif;
   }
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateX(-50%) translateY(8px); }
@@ -429,41 +436,43 @@ function createHudHTML() {
     display: inline-block;
     margin-right: 2px;
   }
-  .pill-green { color: #10B981; } .pill-green::before { background: #10B981; }
-  .pill-amber { color: #F59E0B; } .pill-amber::before { background: #F59E0B; }
-  .pill-red   { color: #EF4444; } .pill-red::before   { background: #EF4444; }
-  @keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .pill-green { color: #34d399; } .pill-green::before { background: #10B981; box-shadow: 0 0 8px #10B981; }
+  .pill-amber { color: #fbbf24; } .pill-amber::before { background: #F59E0B; box-shadow: 0 0 8px #F59E0B; }
+  .pill-red   { color: #f87171; } .pill-red::before   { background: #EF4444; box-shadow: 0 0 8px #EF4444; }
+  @keyframes pulseDot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
   #ca-modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
-    backdrop-filter: blur(4px); z-index: 2147483647;
+    position: fixed; inset: 0; background: rgba(8, 14, 34, 0.75);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 2147483647;
     display: flex; align-items: center; justify-content: center;
   }
   #ca-modal {
-    background: #111827; border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 16px; padding: 24px; max-width: 560px; width: 90%;
+    background: linear-gradient(165deg, #151e48 0%, #1d2d6f 50%, #2d459c 100%);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 20px; padding: 24px; max-width: 560px; width: 90%;
     max-height: 80vh; overflow-y: auto;
     font-family: 'Inter', system-ui, sans-serif; color: #F9FAFB;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.3);
   }
-  #ca-modal h3 { margin: 0 0 12px; font-size: 1.1rem; }
-  #ca-modal-stats { font-size: 12px; color: #9CA3AF; margin-bottom: 8px; }
+  #ca-modal h3 { margin: 0 0 12px; font-size: 1.15rem; font-weight: 700; color: #ffffff; }
+  #ca-modal-stats { font-size: 12px; color: rgba(225, 235, 255, 0.75); margin-bottom: 8px; }
   #ca-bridge-content {
-    background: #0d1117; border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 16px; font-family: monospace;
-    font-size: 12px; white-space: pre-wrap; color: #e6edf3;
+    background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px; padding: 16px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; white-space: pre-wrap; color: #e0e7ff;
     max-height: 300px; overflow-y: auto; margin: 12px 0;
   }
   .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
   .modal-btn {
-    padding: 8px 16px; border-radius: 8px; cursor: pointer;
-    font-size: 13px; border: 1px solid rgba(255,255,255,0.12);
+    padding: 9px 16px; border-radius: 10px; cursor: pointer;
+    font-size: 13px; font-weight: 600; border: 1px solid rgba(255,255,255,0.15);
     font-family: 'Inter', system-ui, sans-serif; transition: all 0.2s ease;
   }
-  .modal-btn-primary { background: #6366F1; color: #fff; border-color: #6366F1; }
-  .modal-btn-primary:hover { background: #4F46E5; }
-  .modal-btn-secondary { background: transparent; color: #a5b4fc; border-color: rgba(99,102,241,0.4); }
-  .modal-btn-secondary:hover { background: rgba(99,102,241,0.15); }
-  .modal-btn-close { background: transparent; color: #9CA3AF; }
-  .modal-btn-close:hover { color: #F9FAFB; background: rgba(255,255,255,0.05); }
+  .modal-btn-primary { background: #11141a; color: #fff; border-color: rgba(255,255,255,0.25); }
+  .modal-btn-primary:hover { background: #191e28; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .modal-btn-secondary { background: rgba(255,255,255,0.12); color: #ffffff; border-color: rgba(255,255,255,0.2); }
+  .modal-btn-secondary:hover { background: rgba(255,255,255,0.2); }
+  .modal-btn-close { background: transparent; color: rgba(255,255,255,0.6); border: none; }
+  .modal-btn-close:hover { color: #F9FAFB; }
 </style>
 <div id="ca-hud" style="display:none;">
   <div id="ca-status-pill" class="pulse-dot pill-green">🛡️ ContextArmor Active</div>
