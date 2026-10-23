@@ -91,6 +91,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           break;
         }
 
+        case 'open_fresh_chat': {
+          const chatUrls = {
+            chatgpt: 'https://chatgpt.com/',
+            claude: 'https://claude.ai/new',
+            gemini: 'https://gemini.google.com/app',
+          };
+          const url = chatUrls[msg.platform] || chatUrls.chatgpt;
+          await chrome.tabs.create({ url, active: true });
+          sendResponse({ success: true, result: { opened: true } });
+          break;
+        }
+
         case 'analytics': {
           const result = await callAPI('/api/analytics', 'GET');
           sendResponse({ success: true, result });

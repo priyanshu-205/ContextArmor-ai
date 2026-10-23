@@ -9,6 +9,7 @@ let scanDebounceTimer = null;
 let hudHost = null;
 let shadowRoot = null;
 let isBackendOnline = false;
+let liveScanSequence = 0;
 
 // ─── Platform Detection ───────────────────────────────────────────────────────
 
@@ -23,9 +24,9 @@ function detectPlatform() {
 // ─── Prompt Input Selectors ───────────────────────────────────────────────────
 
 const SELECTORS = {
-  chatgpt: ['#prompt-textarea', 'textarea[data-id="root"]', 'textarea', 'div[contenteditable="true"]'],
-  claude: ['div[contenteditable="true"].ProseMirror', 'div[contenteditable="true"]'],
-  gemini: ['div.ql-editor[contenteditable="true"]', 'rich-textarea div[contenteditable="true"]', 'textarea']
+  chatgpt: ['#prompt-textarea', 'textarea[data-id="root"]', '[contenteditable="true"][data-placeholder*="Message"]', 'form [contenteditable="true"]'],
+  claude: ['div[contenteditable="true"].ProseMirror', 'fieldset div[contenteditable="true"]', 'div[contenteditable="true"][data-placeholder]'],
+  gemini: ['rich-textarea div[contenteditable="true"]', 'div.ql-editor[contenteditable="true"]', 'rich-textarea textarea']
 };
 
 function findPromptInput() {
@@ -33,7 +34,7 @@ function findPromptInput() {
   const selectors = SELECTORS[platform] || ['textarea', 'div[contenteditable="true"]'];
   for (const sel of selectors) {
     const el = document.querySelector(sel);
-    if (el && (el.offsetHeight > 0 || el.offsetWidth > 0)) return el;
+    if (el && (el.offsetHeight > 0 || el.offsetWidth > 0) && !el.disabled && !el.readOnly) return el;
   }
   return null;
 }
@@ -64,9 +65,9 @@ function setPromptInputValue(element, newText) {
     } else {
       element.value = newText;
     }
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, data: newText }));
+    element.dispatchEvent(new InputEvent('input', {
+      bubbles: true, composed: true, inputType: 'insertText', data: newText
+    }));
   } else {
     // contenteditable — try execCommand first for ProseMirror compatibility
     element.focus();
@@ -77,9 +78,9 @@ function setPromptInputValue(element, newText) {
     } catch (_) {
       // Fallback: direct innerText assignment
       element.innerText = newText;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      element.dispatchEvent(new InputEvent('input', { bubbles: true, data: newText }));
+      element.dispatchEvent(new InputEvent('input', {
+        bubbles: true, composed: true, inputType: 'insertText', data: newText
+      }));
     }
   }
 }
@@ -265,21 +266,15 @@ function clientSideScan(text) {
     /override\s+(your\s+)?(safety|content)\s+(filter|policy|restriction)/gi
   ];
 
-  const hasPII = (
-    emailRegex.test(text) ||
-    phoneRegex.test(text) ||
-    ssnRegex.test(text) ||
-    creditCardRegex.test(text)
-  );
-
-  const hasSecret = (
-    openAIKeyRegex.test(text) ||
-    awsKeyRegex.test(text) ||
-    githubTokenRegex.test(text) ||
-    genericSecretRegex.test(text)
-  );
-
-  const hasInjection = injectionPatterns.some(pattern => pattern.test(text));
+  const hasMatch = (pattern) => {
+    pattern.lastIndex = 0;
+    const matched = pattern.test(text);
+    pattern.lastIndex = 0;
+    return matched;
+  };
+  const hasPII = [emailRegex, phoneRegex, ssnRegex, creditCardRegex].some(hasMatch);
+  const hasSecret = [openAIKeyRegex, awsKeyRegex, githubTokenRegex, genericSecretRegex].some(hasMatch);
+  const hasInjection = injectionPatterns.some(hasMatch);
 
   let riskScore = 0;
   if (hasPII)       riskScore += 25;
@@ -502,15 +497,19 @@ function showTransferModal(bridgePrompt, stats) {
   const overlay = document.createElement('div');
   overlay.id = 'ca-modal-overlay';
 
+  const originalTokens = stats && Number.isFinite(stats.original_tokens) ? stats.original_tokens : null;
+  const bridgeTokens = stats && Number.isFinite(stats.bridge_tokens) ? stats.bridge_tokens : null;
   const compressionRatio = stats && typeof stats.compression_ratio === 'number'
-    ? stats.compression_ratio.toFixed(1)
+    ? stats.compression_ratio.toFixed(2)
     : '?';
-  const tokensSaved = stats && stats.tokens_saved != null ? stats.tokens_saved : '?';
+  const tokenSummary = originalTokens != null && bridgeTokens != null
+    ? `${originalTokens} → ${bridgeTokens} tokens (${compressionRatio}x size ratio)`
+    : 'Bridge ready to copy';
 
   overlay.innerHTML = `
     <div id="ca-modal">
       <h3>📦 Continuation Bridge Generated</h3>
-      <div id="ca-modal-stats">${tokensSaved} tokens saved (${compressionRatio}x compression)</div>
+      <div id="ca-modal-stats">${escapeHtml(tokenSummary)}</div>
       <div id="ca-bridge-content">${escapeHtml(bridgePrompt)}</div>
       <div class="modal-btns">
         <button class="modal-btn modal-btn-secondary" id="ca-copy-btn">📋 Copy Bridge Prompt</button>
@@ -526,7 +525,7 @@ function showTransferModal(bridgePrompt, stats) {
   const copyBtn = overlay.querySelector('#ca-copy-btn');
   copyBtn.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(bridgePrompt);
+      await copyTextToClipboard(bridgePrompt);
       copyBtn.textContent = '✅ Copied!';
       setTimeout(() => { copyBtn.textContent = '📋 Copy Bridge Prompt'; }, 2000);
     } catch (_) {
@@ -548,19 +547,26 @@ function showTransferModal(bridgePrompt, stats) {
   const openBtn = overlay.querySelector('#ca-open-btn');
   openBtn.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(bridgePrompt);
-    } catch (_) {
-      const ta = document.createElement('textarea');
-      ta.value = bridgePrompt;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
+      let copied = true;
+      try {
+        await copyTextToClipboard(bridgePrompt);
+      } catch (_) {
+        copied = false;
+      }
+      const opened = await sendToBackground({ action: 'open_fresh_chat', platform: detectPlatform() });
+      if (opened && opened.opened) {
+        showToast(copied
+          ? 'New chat opened; bridge copied. Paste it to continue.'
+          : 'New chat opened. Copy the bridge here, then paste it to continue.', copied ? 'success' : 'warning');
+        if (copied) overlay.remove();
+      } else {
+        showToast(copied
+          ? 'Bridge copied. Open a new chat and paste it to continue.'
+          : 'Chat did not open and bridge could not be copied. Use Copy Bridge Prompt.', 'warning');
+      }
+    } catch (err) {
+      showToast(`Could not open a new chat: ${err.message}`, 'warning');
     }
-    window.open('https://chatgpt.com/', '_blank');
-    overlay.remove();
   });
 
   // Close button
@@ -571,6 +577,21 @@ function showTransferModal(bridgePrompt, stats) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const copied = document.execCommand('copy');
+    ta.remove();
+    if (!copied) throw new Error('Clipboard access was denied');
+  }
 }
 
 /** Escape HTML for safe innerHTML insertion */
@@ -611,11 +632,12 @@ function injectHud() {
   // ── Auto-Redact PII button ─────────────────────────────────────────────────
   const redactBtn = shadowRoot.querySelector('#ca-redact-btn');
   redactBtn.addEventListener('click', async () => {
-    if (!currentInput) {
+    const input = currentInput;
+    if (!input || !input.isConnected) {
       showToast('No prompt input detected', 'warning');
       return;
     }
-    const text = getPromptText(currentInput);
+    const text = getPromptText(input);
     if (!text.trim()) {
       showToast('Prompt is empty', 'warning');
       return;
@@ -627,7 +649,7 @@ function injectHud() {
     try {
       const result = await sendToBackground({ action: 'scan', text });
       if (result && result.sanitized_text !== undefined) {
-        setPromptInputValue(currentInput, result.sanitized_text);
+        if (input.isConnected) setPromptInputValue(input, result.sanitized_text);
         const count = result.redaction_count != null
           ? result.redaction_count
           : countRedactions(text, result.sanitized_text);
@@ -649,11 +671,12 @@ function injectHud() {
   // ── Optimize & Compress button ─────────────────────────────────────────────
   const optimizeBtn = shadowRoot.querySelector('#ca-optimize-btn');
   optimizeBtn.addEventListener('click', async () => {
-    if (!currentInput) {
+    const input = currentInput;
+    if (!input || !input.isConnected) {
       showToast('No prompt input detected', 'warning');
       return;
     }
-    const text = getPromptText(currentInput);
+    const text = getPromptText(input);
     if (!text.trim()) {
       showToast('Prompt is empty', 'warning');
       return;
@@ -665,13 +688,20 @@ function injectHud() {
     try {
       const result = await sendToBackground({ action: 'optimize', text, mode: 'lossless' });
       if (result && result.optimized_prompt !== undefined) {
-        setPromptInputValue(currentInput, result.optimized_prompt);
+        if (input.isConnected) {
+          setPromptInputValue(input, result.optimized_prompt);
+        }
         const saved = result.tokens_saved != null ? result.tokens_saved : 0;
         const pct = result.reduction_percentage != null
           ? Number(result.reduction_percentage).toFixed(1)
           : '0.0';
-        showToast(`Saved ${saved} tokens (${pct}%)`, 'success');
-        updateHudStatus('ALLOW', `${pct}% smaller`);
+        if (saved > 0) {
+          showToast(`Optimized: saved ${saved} tokens (${pct}%)`, 'success');
+          updateHudStatus('ALLOW', `${pct}% smaller`);
+        } else {
+          showToast('Prompt checked; no token savings were found.', 'success');
+          updateHudStatus('ALLOW', 'Prompt checked');
+        }
       } else if (result && result.error) {
         showToast(`Optimization failed: ${result.error}`, 'warning');
       } else {
@@ -701,7 +731,8 @@ function injectHud() {
       const result = await sendToBackground({ action: 'transfer', messages });
       if (result && result.bridge_prompt) {
         showTransferModal(result.bridge_prompt, {
-          tokens_saved: result.tokens_saved,
+          original_tokens: result.original_tokens,
+          bridge_tokens: result.bridge_tokens,
           compression_ratio: result.compression_ratio
         });
       } else if (result && result.error) {
@@ -726,7 +757,13 @@ function sendToBackground(message) {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
-          resolve(response);
+          if (!response) {
+            reject(new Error('The extension background worker returned no response. Reload the extension and page.'));
+          } else if (response.success === false || response.error) {
+            reject(new Error(response.error || 'The extension request failed.'));
+          } else {
+            resolve(response.result !== undefined ? response.result : response);
+          }
         }
       });
     } catch (err) {
@@ -760,8 +797,9 @@ function hideHud() {
 
 function handleInput(event) {
   clearTimeout(scanDebounceTimer);
+  const requestId = ++liveScanSequence;
   scanDebounceTimer = setTimeout(async () => {
-    const text = getPromptText(event.target || currentInput);
+    const text = getPromptText(currentInput);
 
     if (!text || text.trim().length < 20) {
       updateHudStatus('ALLOW', 'Protected');
@@ -781,6 +819,7 @@ function handleInput(event) {
     if (isBackendOnline) {
       try {
         const result = await sendToBackground({ action: 'scan', text });
+        if (requestId !== liveScanSequence) return;
         if (result && result.risk_action) {
           const apiLabel = result.risk_label || result.risk_action;
           updateHudStatus(result.risk_action, apiLabel);
