@@ -308,10 +308,22 @@ function setupTransfer() {
     lastBridgePrompt = '';
 
     try {
+      if (!chrome.tabs || !chrome.tabs.query) {
+        outputDiv.textContent = 'ℹ Extension Context: Active tab detection connects live to ChatGPT, Claude, and Gemini.';
+        outputDiv.style.display = 'block';
+        return;
+      }
+
       // Get the active tab.
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab || !tab.id) {
         outputDiv.textContent = '⚠ Could not determine the active tab.';
+        outputDiv.style.display = 'block';
+        return;
+      }
+
+      if (!chrome.scripting || !chrome.scripting.executeScript) {
+        outputDiv.textContent = 'ℹ Scrapes active conversation in supported AI model tabs.';
         outputDiv.style.display = 'block';
         return;
       }
