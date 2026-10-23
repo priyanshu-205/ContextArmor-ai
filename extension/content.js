@@ -34,18 +34,44 @@ function detectPlatform() {
 // ─── Prompt Input & Send Button Selectors ─────────────────────────────────────
 
 const SELECTORS = {
-  chatgpt: ['#prompt-textarea', 'textarea[data-id="root"]', '[contenteditable="true"][data-placeholder*="Message"]', 'form [contenteditable="true"]'],
-  claude: ['div[contenteditable="true"].ProseMirror', 'fieldset div[contenteditable="true"]', 'div[contenteditable="true"][data-placeholder]'],
-  gemini: ['rich-textarea div[contenteditable="true"]', 'div.ql-editor[contenteditable="true"]', 'rich-textarea textarea']
+  chatgpt: [
+    '#prompt-textarea',
+    'div#prompt-textarea',
+    'div.ProseMirror',
+    'div[contenteditable="true"]',
+    'textarea[data-id="root"]',
+    'textarea[tabindex="0"]',
+    'textarea',
+    '[contenteditable="true"][data-placeholder*="Message"]',
+    '[contenteditable="true"][data-placeholder*="Ask"]',
+    'form [contenteditable="true"]',
+    'form textarea'
+  ],
+  claude: [
+    'div[contenteditable="true"].ProseMirror',
+    'fieldset div[contenteditable="true"]',
+    'div[contenteditable="true"][data-placeholder]',
+    'div[contenteditable="true"]'
+  ],
+  gemini: [
+    'rich-textarea div[contenteditable="true"]',
+    'div.ql-editor[contenteditable="true"]',
+    'rich-textarea textarea',
+    'div[contenteditable="true"]'
+  ]
 };
 
 const SEND_SELECTORS = {
   chatgpt: [
     'button[data-testid="send-button"]',
-    'button[aria-label="Send prompt"]',
-    'button[aria-label="Send message"]',
+    'button[data-testid="fruitjuice-send-button"]',
+    'button[data-testid*="send"]',
+    'button[aria-label*="Send" i]',
+    'button[aria-label*="Prompt" i]',
+    'button[aria-label*="message" i]',
     'form button[type="submit"]',
-    'button[data-testid="fruitjuice-send-button"]'
+    'form button:last-child',
+    'form button'
   ],
   claude: [
     'button[aria-label="Send Message"]',
@@ -63,11 +89,24 @@ const SEND_SELECTORS = {
 
 function findPromptInput() {
   const platform = detectPlatform();
-  const selectors = SELECTORS[platform] || ['textarea', 'div[contenteditable="true"]'];
-  for (const sel of selectors) {
-    const el = document.querySelector(sel);
-    if (el && (el.offsetHeight > 0 || el.offsetWidth > 0) && !el.disabled && !el.readOnly) return el;
+  // If the user is currently focused inside an editable element, prioritize it
+  const active = document.activeElement;
+  if (active && (active.isContentEditable || active.tagName === 'TEXTAREA' || (active.tagName === 'INPUT' && active.type === 'text'))) {
+    return active.isContentEditable ? (active.closest('#prompt-textarea') || active) : active;
   }
+
+  const selectors = SELECTORS[platform] || ['#prompt-textarea', 'div[contenteditable="true"]', 'textarea'];
+  for (const sel of selectors) {
+    try {
+      const el = document.querySelector(sel);
+      if (el && !el.disabled && !el.readOnly) return el;
+    } catch (_) {}
+  }
+
+  // Universal fallback: look for any prompt textarea or contenteditable inside a form or document
+  const fallback = document.querySelector('#prompt-textarea, div.ProseMirror, form [contenteditable="true"], form textarea, textarea, [contenteditable="true"]');
+  if (fallback) return fallback;
+
   return null;
 }
 
@@ -75,42 +114,44 @@ function findPromptInput() {
 
 function getPromptText(element) {
   if (!element) return '';
-  if (element.tagName === 'TEXTAREA') {
-    return element.value;
+  const editor = element.closest ? (element.closest('#prompt-textarea') || element.closest('[contenteditable="true"]') || element) : element;
+  if (editor.tagName === 'TEXTAREA') {
+    return editor.value || '';
   }
-  // contenteditable div
-  return element.innerText || element.textContent || '';
+  // contenteditable div / ProseMirror
+  return editor.innerText || editor.textContent || '';
 }
 
 // ─── Text Setting ─────────────────────────────────────────────────────────────
 
 function setPromptInputValue(element, newText) {
   if (!element) return;
+  const editor = element.closest ? (element.closest('#prompt-textarea') || element.closest('[contenteditable="true"]') || element) : element;
 
-  if (element.tagName === 'TEXTAREA') {
+  if (editor.tagName === 'TEXTAREA') {
     // Native input value setter to trigger React synthetic events
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype, 'value'
     );
     if (nativeInputValueSetter && nativeInputValueSetter.set) {
-      nativeInputValueSetter.set.call(element, newText);
+      nativeInputValueSetter.set.call(editor, newText);
     } else {
-      element.value = newText;
+      editor.value = newText;
     }
-    element.dispatchEvent(new InputEvent('input', {
+    editor.dispatchEvent(new InputEvent('input', {
       bubbles: true, composed: true, inputType: 'insertText', data: newText
     }));
   } else {
     // contenteditable — try execCommand first for ProseMirror compatibility
-    element.focus();
+    editor.focus();
     try {
       document.execCommand('selectAll', false, null);
       const inserted = document.execCommand('insertText', false, newText);
       if (!inserted) throw new Error('execCommand failed');
     } catch (_) {
       // Fallback: direct innerText assignment
-      element.innerText = newText;
-      element.dispatchEvent(new InputEvent('input', {
+      editor.innerText = newText;
+      editor.dispatchEvent(new InputEvent('input', {
         bubbles: true, composed: true, inputType: 'insertText', data: newText
       }));
     }
@@ -1006,10 +1047,15 @@ function handleGlobalKeydown(event) {
   if (isBypassingSubmit) return;
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 
-  const input = currentInput || findPromptInput();
+  let input = currentInput || findPromptInput();
+  if (!input && (event.target.isContentEditable || event.target.tagName === 'TEXTAREA')) {
+    input = event.target.closest('#prompt-textarea') || event.target;
+  }
   if (!input) return;
 
-  const isInputTarget = event.target === input || input.contains(event.target);
+  const isInputTarget = event.target === input ||
+    (input.contains && input.contains(event.target)) ||
+    (event.target.closest && event.target.closest('#prompt-textarea'));
   if (!isInputTarget) return;
 
   interceptSubmission(event, input);
@@ -1033,7 +1079,7 @@ function handleGlobalClick(event) {
 
   if (!isSendClick) return;
 
-  const input = currentInput || findPromptInput();
+  const input = currentInput || findPromptInput() || document.querySelector('#prompt-textarea, div.ProseMirror, form [contenteditable="true"], form textarea, textarea');
   if (!input) return;
 
   interceptSubmission(event, input);
@@ -1260,6 +1306,12 @@ function attachToInput(input) {
 async function init() {
   const platform = detectPlatform();
   if (platform === 'unknown') return;
+
+  // Immediately inject and display the floating HUD pill on supported platforms
+  if (!hudInjected) {
+    injectHud();
+  }
+  showHud();
 
   await checkBackendStatus();
   await loadPolicySettings();
