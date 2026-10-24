@@ -59,15 +59,20 @@ function updateBadge(tabId, riskScore, action) {
 
   if (action === 'BLOCK') {
     chrome.action.setBadgeBackgroundColor({ color: '#EF4444', tabId });
-    chrome.action.setBadgeText({ text: '🛡', ...badgeOpts });
+    chrome.action.setBadgeText({ text: '!', ...badgeOpts });
   } else if (action === 'WARN') {
     chrome.action.setBadgeBackgroundColor({ color: '#F59E0B', tabId });
     chrome.action.setBadgeText({ text: '!', ...badgeOpts });
   } else {
-    chrome.action.setBadgeBackgroundColor({ color: '#10B981', tabId });
-    chrome.action.setBadgeText({ text: '✓', ...badgeOpts });
+    // Clean/normal state: clear any badge text overlay so the 🛡️ shield icon is fully visible
+    chrome.action.setBadgeText({ text: '', ...badgeOpts });
   }
 }
+
+// Clear badge text by default on startup/install so the shield icon displays cleanly
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.action.setBadgeText({ text: '' });
+});
 
 // ---------------------------------------------------------------------------
 // 3. Message listener
@@ -80,7 +85,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       switch (msg.action) {
 
         case 'scan': {
-          const result = await callAPI('/api/scan', 'POST', { text: msg.text });
+          const result = await callAPI('/api/scan', 'POST', {
+            text: msg.text,
+            warn_threshold: msg.warn_threshold,
+            block_threshold: msg.block_threshold,
+            enabled_rules: msg.enabled_rules,
+            log_event: msg.log_event !== false,
+          });
           const tabId = sender.tab && sender.tab.id;
           if (tabId !== undefined && tabId !== null) {
             updateBadge(tabId, result.risk_score, result.action);
@@ -119,7 +130,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
         case 'analytics': {
-          const result = await callAPI('/api/analytics', 'GET');
+          const params = new URLSearchParams();
+          if (msg.module) params.append('module', msg.module);
+          if (msg.action_filter) params.append('action', msg.action_filter);
+          if (msg.days) params.append('days', msg.days);
+          const queryString = params.toString() ? `?${params.toString()}` : '';
+          const result = await callAPI(`/api/analytics${queryString}`, 'GET');
+          sendResponse({ success: true, result });
+          break;
+        }
+
+        case 'get_settings': {
+          const result = await callAPI('/api/settings', 'GET');
+          sendResponse({ success: true, result });
+          break;
+        }
+
+        case 'save_settings': {
+          const result = await callAPI('/api/settings', 'POST', msg.settings || {});
           sendResponse({ success: true, result });
           break;
         }
@@ -133,9 +161,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         case 'check_backend': {
           try {
             await callAPI('/', 'GET');
-            sendResponse({ online: true });
+            sendResponse({ online: true, success: true });
           } catch {
-            sendResponse({ online: false });
+            sendResponse({ online: false, success: false });
           }
           break;
         }

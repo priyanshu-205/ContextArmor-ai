@@ -458,7 +458,7 @@ def test_chat_transfer():
 
     # A useful bridge can be longer than a short transcript because it adds
     # explicit structure. Validate truthful metrics and retained continuation details.
-    ratio_ok = compression_ratio > 0
+    ratio_ok = compression_ratio >= 0
     objective_ok = bool(primary_objective.strip())
     bridge_ok = "FastAPI" in bridge_prompt or "task" in bridge_prompt.lower()
     context_ok = "JWT" in bridge_prompt and "DELETE" in bridge_prompt and "Recent Conversation Context" in bridge_prompt

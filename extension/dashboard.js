@@ -1,7 +1,8 @@
 // ContextArmor AI - Dashboard Controller
 'use strict';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASES = ['http://127.0.0.1:8000', 'http://localhost:8000'];
+let activeApiBase = 'http://127.0.0.1:8000';
 let currentBridgePrompt = '';
 let currentSanitizedText = '';
 let selectedMode = 'lossless';
@@ -11,30 +12,90 @@ let selectedMode = 'lossless';
 // ─────────────────────────────────────────────
 
 /**
- * Async fetch wrapper with 15-second timeout.
+ * Async fetch wrapper with multi-host fallback and background worker proxy.
  * Returns parsed JSON or throws on error.
  */
 async function api(endpoint, method = 'GET', body = null) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  try {
-    const opts = {
-      method,
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-    };
-    if (body !== null) {
-      opts.body = JSON.stringify(body);
+  const bases = [activeApiBase, ...API_BASES.filter(b => b !== activeApiBase)];
+  let lastErr = null;
+
+  for (const base of bases) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const opts = {
+        method,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      if (body !== null) {
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(`${base}${endpoint}`, opts);
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw new Error(`API ${res.status}: ${errText}`);
+      }
+      activeApiBase = base;
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastErr = err;
     }
-    const res = await fetch(`${API_BASE}${endpoint}`, opts);
-    if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`API ${res.status}: ${errText}`);
-    }
-    return await res.json();
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  // Fallback to extension background service worker if running inside Chrome extension
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      const bgRes = await new Promise((resolve) => {
+        let action = null;
+        let data = {};
+        if (endpoint.startsWith('/api/analytics')) {
+          action = 'analytics';
+          const urlObj = new URL(endpoint, 'http://dummy');
+          if (urlObj.searchParams.get('module')) data.module = urlObj.searchParams.get('module');
+          if (urlObj.searchParams.get('action')) data.action_filter = urlObj.searchParams.get('action');
+          if (urlObj.searchParams.get('days')) data.days = urlObj.searchParams.get('days');
+        } else if (endpoint === '/api/settings') {
+          action = method === 'POST' ? 'save_settings' : 'get_settings';
+          if (method === 'POST') data = { settings: body };
+        } else if (endpoint === '/api/reset-demo') {
+          action = 'reset_demo';
+        } else if (endpoint === '/api/scan') {
+          action = 'scan';
+          data = body || {};
+        } else if (endpoint === '/api/optimize') {
+          action = 'optimize';
+          data = body || {};
+        } else if (endpoint === '/api/transfer') {
+          action = 'transfer';
+          data = body || {};
+        }
+
+        if (action) {
+          chrome.runtime.sendMessage({ action, ...data }, (response) => {
+            if (chrome.runtime.lastError || !response) {
+              resolve(null);
+            } else {
+              resolve(response);
+            }
+          });
+        } else {
+          resolve(null);
+        }
+      });
+
+      if (bgRes) {
+        if (bgRes.success && bgRes.result !== undefined) {
+          return bgRes.result;
+        }
+        if (bgRes.success) return bgRes;
+      }
+    } catch (_) {}
+  }
+
+  throw lastErr || new Error('Cannot reach ContextArmor backend at 127.0.0.1:8000 or localhost:8000');
 }
 
 /**
@@ -202,7 +263,17 @@ const PRESET_XFER_3_DATA = [
 
 async function loadAnalytics() {
   try {
-    const data = await api('/api/analytics');
+    const modEl = document.getElementById('filter-module');
+    const actEl = document.getElementById('filter-action');
+    const daysEl = document.getElementById('filter-days');
+
+    const params = new URLSearchParams();
+    if (modEl && modEl.value) params.append('module', modEl.value);
+    if (actEl && actEl.value) params.append('action', actEl.value);
+    if (daysEl && daysEl.value) params.append('days', daysEl.value);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const data = await api(`/api/analytics${qs}`);
 
     // KPI ribbon
     const total = (data.total_scans || 0) + (data.total_optimizations || 0) + (data.total_transfers || 0);
@@ -213,7 +284,14 @@ async function loadAnalytics() {
     document.getElementById('k-risk').textContent =
       data.average_risk_score !== null && data.average_risk_score !== undefined
         ? Number(data.average_risk_score).toFixed(1)
-        : '—';
+        : '0.0';
+
+    // Update status badge to online since analytics call succeeded
+    const badge = document.getElementById('db-status-badge');
+    if (badge && !badge.textContent.includes('Online')) {
+      badge.className = 'pill pill-green';
+      badge.textContent = '● API Online :8000';
+    }
 
     // Charts & log
     renderDonutChart(data.category_breakdown || {});
@@ -221,10 +299,16 @@ async function loadAnalytics() {
     renderAuditLog(data.recent_events || []);
   } catch (err) {
     console.warn('[ContextArmor] loadAnalytics error:', err.message);
-    // Show placeholder zeros rather than crashing
+    // Mark status offline when request fails
+    const badge = document.getElementById('db-status-badge');
+    if (badge) {
+      badge.className = 'pill pill-red';
+      badge.textContent = '● API Offline';
+    }
+    // Failed API requests show disconnected indicator rather than pretending metrics are 0
     ['k-total','k-tokens','k-pii','k-blocked','k-risk'].forEach(id => {
       const el = document.getElementById(id);
-      if (el && el.textContent === '—') el.textContent = '0';
+      if (el) el.textContent = '—';
     });
     renderDonutChart({});
     renderBarChart([]);
@@ -691,9 +775,8 @@ function setupSettings() {
   const providerSelect = document.getElementById('settings-provider');
   const ollamaGroup = document.getElementById('ollama-group');
 
-  // Open modal
-  document.getElementById('btn-settings').addEventListener('click', () => {
-    // Load saved values
+  // Open modal & load backend settings
+  document.getElementById('btn-settings').addEventListener('click', async () => {
     const savedProvider = localStorage.getItem('ca_provider') || '';
     const savedKey = localStorage.getItem('ca_api_key') || '';
     const savedOllamaUrl = localStorage.getItem('ca_ollama_url') || 'http://localhost:11434';
@@ -702,6 +785,25 @@ function setupSettings() {
     document.getElementById('settings-api-key').value = savedKey;
     document.getElementById('settings-ollama-url').value = savedOllamaUrl;
     ollamaGroup.style.display = savedProvider === 'ollama' ? 'block' : 'none';
+
+    try {
+      const s = await api('/api/settings');
+      if (s) {
+        if (s.warn_threshold !== undefined) document.getElementById('settings-warn-threshold').value = s.warn_threshold;
+        if (s.block_threshold !== undefined) document.getElementById('settings-block-threshold').value = s.block_threshold;
+        if (s.auto_redact_on_send !== undefined) document.getElementById('settings-auto-redact').checked = Boolean(s.auto_redact_on_send);
+        if (Array.isArray(s.restricted_websites)) {
+          document.getElementById('settings-restricted-sites').value = s.restricted_websites.join(', ');
+        }
+        if (Array.isArray(s.enabled_rules)) {
+          document.getElementById('settings-rule-pii').checked = s.enabled_rules.includes('PII');
+          document.getElementById('settings-rule-secret').checked = s.enabled_rules.includes('SECRET');
+          document.getElementById('settings-rule-injection').checked = s.enabled_rules.includes('PROMPT_INJECTION');
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch backend settings:', e.message);
+    }
 
     modal.classList.add('open');
   });
@@ -717,10 +819,34 @@ function setupSettings() {
   });
 
   // Save settings
-  document.getElementById('btn-settings-save').addEventListener('click', () => {
+  document.getElementById('btn-settings-save').addEventListener('click', async () => {
     localStorage.setItem('ca_provider', providerSelect.value);
     localStorage.setItem('ca_api_key', document.getElementById('settings-api-key').value);
     localStorage.setItem('ca_ollama_url', document.getElementById('settings-ollama-url').value);
+
+    const warnVal = parseInt(document.getElementById('settings-warn-threshold').value, 10) || 30;
+    const blockVal = parseInt(document.getElementById('settings-block-threshold').value, 10) || 70;
+    const autoRedact = document.getElementById('settings-auto-redact').checked;
+    const sitesRaw = document.getElementById('settings-restricted-sites').value;
+    const sites = sitesRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    const rules = [];
+    if (document.getElementById('settings-rule-pii').checked) rules.push('PII');
+    if (document.getElementById('settings-rule-secret').checked) rules.push('SECRET');
+    if (document.getElementById('settings-rule-injection').checked) rules.push('PROMPT_INJECTION');
+
+    try {
+      await api('/api/settings', 'POST', {
+        warn_threshold: warnVal,
+        block_threshold: blockVal,
+        enabled_rules: rules,
+        restricted_websites: sites,
+        auto_redact_on_send: autoRedact
+      });
+    } catch (err) {
+      console.warn('Could not save settings to backend:', err.message);
+    }
+
     modal.classList.remove('open');
   });
 
@@ -731,12 +857,16 @@ function setupSettings() {
 }
 
 // ─────────────────────────────────────────────
-// AUDIT REFRESH BUTTON
+// AUDIT REFRESH & FILTERS
 // ─────────────────────────────────────────────
 
 function setupAuditRefresh() {
   document.getElementById('btn-refresh-audit').addEventListener('click', () => {
     loadAnalytics();
+  });
+  ['filter-module', 'filter-action', 'filter-days'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => loadAnalytics());
   });
 }
 
@@ -767,21 +897,53 @@ function setupResetDemo() {
 
 async function checkBackendStatus() {
   const badge = document.getElementById('db-status-badge');
-  try {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${API_BASE}/`, { signal: controller.signal });
-    clearTimeout(tid);
-    if (res.ok) {
-      badge.className = 'pill pill-green';
-      badge.textContent = '● API Online :8000';
-    } else {
-      throw new Error('Non-OK status');
-    }
-  } catch {
-    badge.className = 'pill pill-red';
-    badge.textContent = '● API Offline';
+  if (!badge) return false;
+
+  // Show "Checking..." if currently offline or connecting
+  if (!badge.textContent.includes('Online')) {
+    badge.className = 'pill pill-amber';
+    badge.textContent = '● Checking...';
   }
+
+  const bases = [activeApiBase, ...API_BASES.filter(b => b !== activeApiBase)];
+  for (const base of bases) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${base}/`, { signal: controller.signal });
+      clearTimeout(tid);
+      if (res.ok) {
+        activeApiBase = base;
+        badge.className = 'pill pill-green';
+        badge.textContent = '● API Online :8000';
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Also check background worker if in Chrome extension context
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    try {
+      const bgOnline = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'check_backend' }, (resp) => {
+          if (!chrome.runtime.lastError && resp && (resp.online || resp.success)) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        });
+      });
+      if (bgOnline) {
+        badge.className = 'pill pill-green';
+        badge.textContent = '● API Online :8000';
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  badge.className = 'pill pill-red';
+  badge.textContent = '● API Offline';
+  return false;
 }
 
 // ─────────────────────────────────────────────
@@ -789,13 +951,21 @@ async function checkBackendStatus() {
 // ─────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
-  checkBackendStatus();
+  const isOnline = await checkBackendStatus();
   await loadAnalytics();
+
   setupTabs();
   setupPresets();
   setupSandbox();
   setupSettings();
   setupAuditRefresh();
   setupResetDemo();
-  setInterval(loadAnalytics, 30000);
+
+  // Periodic health check and auto-recovery loop (every 15s)
+  setInterval(async () => {
+    const online = await checkBackendStatus();
+    if (online) {
+      await loadAnalytics();
+    }
+  }, 15000);
 });

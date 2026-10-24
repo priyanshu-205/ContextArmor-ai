@@ -11,7 +11,10 @@ import uvicorn
 import json
 from datetime import datetime
 
-from database import init_db, log_event, get_analytics, seed_demo_data, reset_demo
+from database import (
+    init_db, log_event, get_analytics, seed_demo_data, reset_demo,
+    get_settings, save_settings
+)
 from guardrails_engine import GuardrailsEngine
 from compressor_engine import CompressorEngine
 from transfer_engine import TransferEngine
@@ -38,11 +41,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    """Initialize the database and seed demo data if the DB is empty."""
+    """Initialize the database tables if they do not exist."""
     init_db()
-    analytics = get_analytics()
-    if analytics.get("total_scans", 0) == 0:
-        seed_demo_data()
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +51,10 @@ async def on_startup() -> None:
 
 class ScanRequest(BaseModel):
     text: str = Field(min_length=1, max_length=200_000)
+    warn_threshold: Optional[int] = None
+    block_threshold: Optional[int] = None
+    enabled_rules: Optional[List[str]] = None
+    log_event: Optional[bool] = True
 
 
 class OptimizeRequest(BaseModel):
@@ -70,6 +74,15 @@ class TransferRequest(BaseModel):
     raw_transcript: Optional[str] = Field(default=None, max_length=200_000)
 
 
+class SettingsRequest(BaseModel):
+    warn_threshold: Optional[int] = Field(default=30, ge=1, le=100)
+    block_threshold: Optional[int] = Field(default=70, ge=1, le=100)
+    enabled_rules: Optional[List[str]] = None
+    restricted_websites: Optional[List[str]] = None
+    auto_redact_on_send: Optional[bool] = False
+    fail_closed: Optional[bool] = False
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -80,19 +93,29 @@ async def scan(request: ScanRequest) -> dict:
     Scan text for PII, secrets, and prompt-injection patterns.
     Returns risk score, action (ALLOW/WARN/BLOCK), findings, and sanitized text.
     """
-    engine = GuardrailsEngine()
+    settings = get_settings()
+    warn_th = request.warn_threshold if request.warn_threshold is not None else settings.get("warn_threshold", 30)
+    block_th = request.block_threshold if request.block_threshold is not None else settings.get("block_threshold", 70)
+    rules = request.enabled_rules if request.enabled_rules is not None else settings.get("enabled_rules")
+
+    engine = GuardrailsEngine(
+        warn_threshold=warn_th,
+        block_threshold=block_th,
+        enabled_rules=rules,
+    )
     result = engine.scan(request.text)
 
-    log_event(
-        module="SCAN",
-        risk_score=result["risk_score"],
-        action=result["action"],
-        detected_entities=[f["type"] for f in result["findings"]],
-        tokens_saved=0,
-        original_tokens=0,
-        compressed_tokens=0,
-        details_dict={"findings_count": len(result["findings"])},
-    )
+    if request.log_event:
+        log_event(
+            module="SCAN",
+            risk_score=result["risk_score"],
+            action=result["action"],
+            detected_entities=[f["type"] for f in result["findings"]],
+            tokens_saved=0,
+            original_tokens=0,
+            compressed_tokens=0,
+            details_dict={"findings_count": len(result["findings"])},
+        )
 
     return result
 
@@ -159,11 +182,28 @@ async def transfer(request: TransferRequest) -> dict:
 
 
 @app.get("/api/analytics")
-async def analytics() -> dict:
+async def analytics(
+    module: Optional[str] = None,
+    action: Optional[str] = None,
+    days: Optional[int] = None,
+) -> dict:
     """
-    Return aggregated usage statistics and the 25 most recent events.
+    Return aggregated usage statistics and recent events with optional filters.
     """
-    return get_analytics()
+    return get_analytics(module=module, action=action, days=days)
+
+
+@app.get("/api/settings")
+async def get_settings_endpoint() -> dict:
+    """Get current guardrails and extension policy settings."""
+    return get_settings()
+
+
+@app.post("/api/settings")
+async def update_settings_endpoint(request: SettingsRequest) -> dict:
+    """Update guardrails thresholds, enabled rules, and website restrictions."""
+    updated = save_settings(request.dict(exclude_none=True))
+    return {"status": "success", "settings": updated}
 
 
 @app.post("/api/reset-demo")
